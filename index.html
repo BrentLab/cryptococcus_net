@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transcription Factor Network</title>
+    <title>Cryptococcus neoformans TF Network Map</title>
     
     <!-- Cytoscape.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.21.1/cytoscape.min.js"></script>
@@ -149,12 +149,16 @@
         }
         
         .checkbox-list {
-            max-height: 300px;
+            max-height: 200px;
             overflow-y: auto;
             border: 1px solid #ddd;
             margin-bottom: 10px;
             padding: 5px;
             background-color: white;
+        }
+        
+        #transcription-factors {
+            max-height: 170px; /* Approximately 8 TFs at once */
         }
         
         .checkbox-item {
@@ -184,11 +188,21 @@
             color: #777;
             text-align: center;
         }
+        
+        .selection-info {
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #555;
+        }
     </style>
 </head>
 <body>
     <div id="header">
-        <h1>Transcription Factor Network Visualization</h1>
+        <h1>Visualization of the TF network map of <i>Cryptococcus neoformans</i></h1>
     </div>
     
     <div id="container">
@@ -233,6 +247,13 @@
                 <button id="visualize-btn">Visualize Network</button>
                 <button id="reset-btn">Clear All</button>
                 <button id="fit-btn">Fit View</button>
+            </div>
+            
+            <div class="control-section">
+                <h3>Selection Options</h3>
+                <button id="select-tf-targets-btn">Select TF & Targets</button>
+                <button id="clear-selection-btn">Clear Selection</button>
+                <div class="selection-info" id="selection-info">No nodes selected</div>
             </div>
         </div>
         

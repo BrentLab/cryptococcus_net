@@ -25,6 +25,7 @@ const nodeInfo = document.getElementById('node-info');
 const nodeName = document.getElementById('node-name');
 const nodeType = document.getElementById('node-type');
 const nodeConnections = document.getElementById('node-connections');
+const selectionInfo = document.getElementById('selection-info');
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -38,6 +39,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('clear-all-tf').addEventListener('click', () => selectAllCheckboxes(tfContainer, false, selectedTFs));
     document.getElementById('select-all-genes').addEventListener('click', () => selectAllCheckboxes(geneContainer, true, selectedGenes));
     document.getElementById('clear-all-genes').addEventListener('click', () => selectAllCheckboxes(geneContainer, false, selectedGenes));
+    
+    // Add event listeners for selection options
+    document.getElementById('select-tf-targets-btn').addEventListener('click', selectTFAndTargets);
+    document.getElementById('clear-selection-btn').addEventListener('click', clearSelection);
     
     // Set up search functionality
     tfSearch.addEventListener('input', () => filterItems(tfContainer, tfSearch.value));
@@ -180,14 +185,18 @@ function processNetworkData(data) {
         checkbox.type = 'checkbox';
         checkbox.value = tf;
         
-        const commonName = tfToCommonName[tf] || tf;
+        let commonName = tfToCommonName[tf] || tf;
+        // Format common name with first letter capital, rest lowercase
+        commonName = commonName.charAt(0).toUpperCase() + commonName.slice(1).toLowerCase();
+        
         checkbox.dataset.common = commonName.toLowerCase();
         checkbox.dataset.systematic = tf.toLowerCase();
         
         checkbox.addEventListener('change', () => handleCheckboxChange(checkbox, selectedTFs));
         
         const label = document.createElement('label');
-        label.textContent = `${commonName} (${tf})`;
+        // Only show systematic name in parentheses if it's different from common name
+        label.textContent = commonName !== tf ? `${commonName} (${tf})` : commonName;
         
         item.appendChild(checkbox);
         item.appendChild(label);
@@ -211,7 +220,10 @@ function processNetworkData(data) {
         checkbox.addEventListener('change', () => handleCheckboxChange(checkbox, selectedGenes));
         
         const label = document.createElement('label');
-        label.textContent = `${commonName} (${gene})`;
+        // Only show systematic name in parentheses if it's different from common name
+        label.textContent = commonName !== gene ? `${commonName} (${gene})` : commonName;
+        // Make target gene labels appear in italic
+        label.style.fontStyle = 'italic';
         
         item.appendChild(checkbox);
         item.appendChild(label);
@@ -255,10 +267,19 @@ function initCytoscape() {
                 }
             },
             {
+                selector: 'node[nodeType="TF-target"]',
+                style: {
+                    'background-color': '#3498db', // Same blue as TFs
+                    'shape': 'diamond', // Diamond shape to distinguish from pure TFs
+                    'font-style': 'italic' // Italic like targets
+                }
+            },
+            {
                 selector: 'node[nodeType="target"]',
                 style: {
                     'background-color': '#e74c3c',
-                    'shape': 'rectangle'
+                    'shape': 'rectangle',
+                    'font-style': 'italic'
                 }
             },
             {
@@ -271,8 +292,33 @@ function initCytoscape() {
                     'curve-style': 'bezier',
                     'opacity': 'data(opacity)'
                 }
+            },
+            // Styles for selected nodes
+            {
+                selector: 'node:selected',
+                style: {
+                    'border-width': 3,
+                    'border-color': '#ffd700', // Gold border for selected nodes
+                    'border-opacity': 0.8
+                }
+            },
+            {
+                selector: 'edge:selected',
+                style: {
+                    'line-color': '#ffd700', // Gold for selected edges
+                    'target-arrow-color': '#ffd700',
+                    'width': 'data(weight)',
+                    'opacity': 1
+                }
             }
-        ]
+        ],
+        // Enable box selection to select multiple nodes by dragging
+        selectionType: 'additive'
+    });
+    
+    // Enable dragging of nodes - when nodes are selected, they move together
+    cy.on('grab', 'node', function(e) {
+        updateSelectionInfo();
     });
     
     // Add click event for nodes to show info
@@ -280,10 +326,28 @@ function initCytoscape() {
         const node = evt.target;
         
         // Display node information with both names
-        const commonName = node.data('name');
+        let commonName = node.data('name');
         const sysName = node.id();
-        nodeName.textContent = `${commonName} (${sysName})`;
-        nodeType.textContent = node.data('nodeType') === 'TF' ? 'Transcription Factor' : 'Target Gene';
+        
+        // For TFs, ensure proper capitalization (first letter capital, rest lowercase)
+        if (node.data('nodeType') === 'TF') {
+            commonName = commonName.charAt(0).toUpperCase() + commonName.slice(1).toLowerCase();
+        }
+        
+        // Only show systematic name in parentheses if it's different from common name
+        nodeName.textContent = commonName !== sysName ? `${commonName} (${sysName})` : commonName;
+        
+        // Set style based on node type
+        if (node.data('nodeType') === 'TF') {
+            nodeType.textContent = 'Transcription Factor';
+            nodeName.style.fontStyle = 'normal';
+        } else if (node.data('nodeType') === 'TF-target') {
+            nodeType.textContent = 'Transcription Factor & Target Gene';
+            nodeName.style.fontStyle = 'italic';
+        } else {
+            nodeType.textContent = 'Target Gene';
+            nodeName.style.fontStyle = 'italic';
+        }
         
         // Count connections
         const outgoing = node.outgoers('edge').length;
@@ -291,6 +355,8 @@ function initCytoscape() {
         
         if (node.data('nodeType') === 'TF') {
             nodeConnections.textContent = `Regulates ${outgoing} genes`;
+        } else if (node.data('nodeType') === 'TF-target') {
+            nodeConnections.textContent = `Regulates ${outgoing} genes / Regulated by ${incoming} transcription factors`;
         } else {
             nodeConnections.textContent = `Regulated by ${incoming} transcription factors`;
         }
@@ -315,6 +381,9 @@ function initCytoscape() {
         nodeType.textContent = 'Regulatory Relationship';
         nodeConnections.textContent = `Confidence: ${confidence}`;
         
+        // Style the edge information text - target gene name should be italic
+        nodeName.innerHTML = `${sourceName} → <i>${targetName}</i>`;
+        
         // Show the info panel
         nodeInfo.style.display = 'block';
     });
@@ -324,6 +393,15 @@ function initCytoscape() {
         if (evt.target === cy) {
             nodeInfo.style.display = 'none';
         }
+    });
+    
+    // Update selection info on selection changes
+    cy.on('select', function() {
+        updateSelectionInfo();
+    });
+    
+    cy.on('unselect', function() {
+        updateSelectionInfo();
     });
 }
 
@@ -381,7 +459,9 @@ function visualizeNetwork() {
             
             // Add TF node if not already added
             if (!addedNodes.has(tf)) {
-                const commonTFName = tfToCommonName[tf] || tf;
+                let commonTFName = tfToCommonName[tf] || tf;
+                // Format TF name with first letter capital, rest lowercase
+                commonTFName = commonTFName.charAt(0).toUpperCase() + commonTFName.slice(1).toLowerCase();
                 elements.push({
                     data: {
                         id: tf,
@@ -396,11 +476,15 @@ function visualizeNetwork() {
             // Add target gene node if not already added
             if (!addedNodes.has(gene)) {
                 const commonGeneName = geneToCommonName[gene] || gene;
+                
+                // Check if this target gene is also a TF (exists in tfSet)
+                const isAlsoTF = tfSet.has(gene);
+                
                 elements.push({
                     data: {
                         id: gene,
                         name: commonGeneName, // Store common name for display
-                        nodeType: 'target',
+                        nodeType: isAlsoTF ? 'TF-target' : 'target', // Mark genes that are also TFs
                         size: 20
                     }
                 });
@@ -495,4 +579,82 @@ function fitNetworkView() {
     if (cy.elements().length > 0) {
         cy.fit(cy.elements(), 50);
     }
+}
+
+// Function to select a TF and all its target genes
+function selectTFAndTargets() {
+    // Check if any nodes are selected
+    const selectedNodes = cy.nodes(':selected');
+    
+    if (selectedNodes.length === 0) {
+        alert('Please select at least one transcription factor before using this function.');
+        return;
+    }
+    
+    // Keep track of new selections
+    let newSelections = 0;
+    
+    // For each selected node
+    selectedNodes.forEach(node => {
+        // If it's a TF, select all its targets
+        if (node.data('nodeType') === 'TF' || node.data('nodeType') === 'TF-target') {
+            // Get all outgoing edges from this TF
+            const outgoingEdges = node.outgoers('edge');
+            
+            // Select all those edges and their target nodes
+            outgoingEdges.forEach(edge => {
+                if (!edge.selected()) {
+                    edge.select();
+                    newSelections++;
+                }
+                
+                // Select the target node
+                const targetNode = edge.target();
+                if (!targetNode.selected()) {
+                    targetNode.select();
+                    newSelections++;
+                }
+            });
+        }
+    });
+    
+    // Update the selection info
+    updateSelectionInfo();
+    
+    // If nothing new was selected, inform the user
+    if (newSelections === 0 && selectedNodes.length > 0) {
+        alert('The selected transcription factor(s) do not regulate any genes in the current network view.');
+    }
+}
+
+// Function to clear all selections
+function clearSelection() {
+    cy.elements().unselect();
+    updateSelectionInfo();
+}
+
+// Update the selection info display
+function updateSelectionInfo() {
+    const selectedNodes = cy.nodes(':selected');
+    const selectedEdges = cy.edges(':selected');
+    
+    if (selectedNodes.length === 0) {
+        selectionInfo.textContent = 'No nodes selected';
+        return;
+    }
+    
+    // Count TFs and targets
+    let tfCount = 0;
+    let targetCount = 0;
+    
+    selectedNodes.forEach(node => {
+        if (node.data('nodeType') === 'TF' || node.data('nodeType') === 'TF-target') {
+            tfCount++;
+        }
+        if (node.data('nodeType') === 'target' || node.data('nodeType') === 'TF-target') {
+            targetCount++;
+        }
+    });
+    
+    selectionInfo.textContent = `Selected: ${tfCount} TF(s), ${targetCount} target gene(s), ${selectedEdges.length} connection(s)`;
 }
