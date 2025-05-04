@@ -147,6 +147,43 @@
             display: none;
             max-width: 250px;
         }
+        
+        .checkbox-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: white;
+        }
+        
+        .checkbox-item {
+            padding: 3px 5px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .checkbox-item:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .search-box {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .loading-message {
+            padding: 10px;
+            color: #777;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -158,18 +195,24 @@
         <div id="control-panel">
             <div class="control-section">
                 <h3>Transcription Factors</h3>
-                <select id="transcription-factors" size="10" multiple>
-                    <option value="" disabled>Loading...</option>
-                </select>
+                <div id="tf-search-container">
+                    <input type="text" id="tf-search" placeholder="Search TFs..." class="search-box">
+                </div>
+                <div id="transcription-factors" class="checkbox-list">
+                    <div class="loading-message">Loading...</div>
+                </div>
                 <button id="select-all-tf">Select All</button>
                 <button id="clear-all-tf">Clear All</button>
             </div>
             
             <div class="control-section">
                 <h3>Target Genes</h3>
-                <select id="target-genes" size="10" multiple>
-                    <option value="" disabled>Loading...</option>
-                </select>
+                <div id="gene-search-container">
+                    <input type="text" id="gene-search" placeholder="Search genes..." class="search-box">
+                </div>
+                <div id="target-genes" class="checkbox-list">
+                    <div class="loading-message">Loading...</div>
+                </div>
                 <button id="select-all-genes">Select All</button>
                 <button id="clear-all-genes">Clear All</button>
             </div>
@@ -177,7 +220,7 @@
             <div class="control-section">
                 <h3>Confidence Filter</h3>
                 <div class="slider-container">
-                    <input type="range" id="confidence-slider" min="0" max="1" step="0.05" value="0">
+                    <input type="range" id="confidence-slider" min="0" max="1" step="0.01" value="0">
                     <div class="slider-labels">
                         <span>0</span>
                         <span>Min Confidence: <span id="confidence-value">0</span></span>
@@ -188,7 +231,7 @@
             
             <div class="control-section">
                 <button id="visualize-btn">Visualize Network</button>
-                <button id="reset-btn">Reset</button>
+                <button id="reset-btn">Clear All</button>
                 <button id="fit-btn">Fit View</button>
             </div>
         </div>

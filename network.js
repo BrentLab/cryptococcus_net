@@ -4,11 +4,21 @@ let tfSet = new Set();
 let geneSet = new Set();
 let cy = null;
 
+// Maps to store name relationships
+let tfToCommonName = {}; // Maps systematic TF name to common name
+let geneToCommonName = {}; // Maps systematic gene name to common name
+
+// Maps to store selected items
+let selectedTFs = new Set();
+let selectedGenes = new Set();
+
 // DOM elements
 const loading = document.getElementById('loading');
 const loadingText = document.getElementById('loading-text');
-const tfSelect = document.getElementById('transcription-factors');
-const geneSelect = document.getElementById('target-genes');
+const tfContainer = document.getElementById('transcription-factors');
+const geneContainer = document.getElementById('target-genes');
+const tfSearch = document.getElementById('tf-search');
+const geneSearch = document.getElementById('gene-search');
 const confidenceSlider = document.getElementById('confidence-slider');
 const confidenceValue = document.getElementById('confidence-value');
 const nodeInfo = document.getElementById('node-info');
@@ -24,10 +34,14 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('visualize-btn').addEventListener('click', visualizeNetwork);
     document.getElementById('reset-btn').addEventListener('click', resetVisualization);
     document.getElementById('fit-btn').addEventListener('click', fitNetworkView);
-    document.getElementById('select-all-tf').addEventListener('click', () => selectAll(tfSelect));
-    document.getElementById('clear-all-tf').addEventListener('click', () => clearAll(tfSelect));
-    document.getElementById('select-all-genes').addEventListener('click', () => selectAll(geneSelect));
-    document.getElementById('clear-all-genes').addEventListener('click', () => clearAll(geneSelect));
+    document.getElementById('select-all-tf').addEventListener('click', () => selectAllCheckboxes(tfContainer, true, selectedTFs));
+    document.getElementById('clear-all-tf').addEventListener('click', () => selectAllCheckboxes(tfContainer, false, selectedTFs));
+    document.getElementById('select-all-genes').addEventListener('click', () => selectAllCheckboxes(geneContainer, true, selectedGenes));
+    document.getElementById('clear-all-genes').addEventListener('click', () => selectAllCheckboxes(geneContainer, false, selectedGenes));
+    
+    // Set up search functionality
+    tfSearch.addEventListener('input', () => filterItems(tfContainer, tfSearch.value));
+    geneSearch.addEventListener('input', () => filterItems(geneContainer, geneSearch.value));
     
     // Set up confidence slider
     confidenceSlider.addEventListener('input', function() {
@@ -45,17 +59,55 @@ document.addEventListener('DOMContentLoaded', function() {
     loadNetworkData();
 });
 
-// Helper function to select all options in a select element
-function selectAll(selectElement) {
-    for (let i = 0; i < selectElement.options.length; i++) {
-        selectElement.options[i].selected = true;
+// Helper function to select/deselect all checkboxes
+function selectAllCheckboxes(container, isChecked, selectedSet) {
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        if (isChecked) {
+            selectedSet.add(checkbox.value);
+        } else {
+            selectedSet.delete(checkbox.value);
+        }
+    });
+    
+    // If network already visualized, update it
+    if (cy && cy.elements().length > 0) {
+        visualizeNetwork();
     }
 }
 
-// Helper function to clear all selections in a select element
-function clearAll(selectElement) {
-    for (let i = 0; i < selectElement.options.length; i++) {
-        selectElement.options[i].selected = false;
+// Helper function to filter items based on search input
+function filterItems(container, searchText) {
+    const items = container.querySelectorAll('.checkbox-item');
+    const lowerSearch = searchText.toLowerCase();
+    
+    items.forEach(item => {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const commonName = checkbox.dataset.common;
+        const systematicName = checkbox.dataset.systematic;
+        
+        if (commonName.includes(lowerSearch) || 
+            systematicName.includes(lowerSearch) || 
+            lowerSearch === '') {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+// Helper function to handle checkbox selection
+function handleCheckboxChange(checkbox, selectedSet) {
+    if (checkbox.checked) {
+        selectedSet.add(checkbox.value);
+    } else {
+        selectedSet.delete(checkbox.value);
+    }
+    
+    // If network already visualized, update it
+    if (cy && cy.elements().length > 0) {
+        visualizeNetwork();
     }
 }
 
@@ -68,7 +120,7 @@ function loadNetworkData() {
     loadingText.textContent = 'Loading network data...';
     
     // Parse the TSV file using PapaParse
-    Papa.parse('net_np3.tsv', {
+    Papa.parse('net_np3_sys_com_100.tsv', {
         download: true,
         delimiter: '\t',
         header: true,
@@ -98,8 +150,18 @@ function processNetworkData(data) {
     // Extract unique transcription factors and target genes
     data.forEach(row => {
         if (row.REGULATOR && row.TARGET) {
+            // Store systematic names
             tfSet.add(row.REGULATOR);
             geneSet.add(row.TARGET);
+            
+            // Store common name mappings
+            if (row['REGULATOR-COM']) {
+                tfToCommonName[row.REGULATOR] = row['REGULATOR-COM'];
+            }
+            
+            if (row['TARGET-COM']) {
+                geneToCommonName[row.TARGET] = row['TARGET-COM'];
+            }
         }
     });
     
@@ -108,22 +170,52 @@ function processNetworkData(data) {
     // Fill select elements with options
     loadingText.textContent = 'Populating menus...';
     
-    // Clear and populate the transcription factors select
-    tfSelect.innerHTML = '';
+    // Clear and populate the transcription factors with checkboxes
+    tfContainer.innerHTML = '';
     Array.from(tfSet).sort().forEach(tf => {
-        const option = document.createElement('option');
-        option.value = tf;
-        option.textContent = tf;
-        tfSelect.appendChild(option);
+        const item = document.createElement('div');
+        item.className = 'checkbox-item';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = tf;
+        
+        const commonName = tfToCommonName[tf] || tf;
+        checkbox.dataset.common = commonName.toLowerCase();
+        checkbox.dataset.systematic = tf.toLowerCase();
+        
+        checkbox.addEventListener('change', () => handleCheckboxChange(checkbox, selectedTFs));
+        
+        const label = document.createElement('label');
+        label.textContent = `${commonName} (${tf})`;
+        
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        tfContainer.appendChild(item);
     });
     
-    // Clear and populate the target genes select
-    geneSelect.innerHTML = '';
+    // Clear and populate the target genes with checkboxes
+    geneContainer.innerHTML = '';
     Array.from(geneSet).sort().forEach(gene => {
-        const option = document.createElement('option');
-        option.value = gene;
-        option.textContent = gene;
-        geneSelect.appendChild(option);
+        const item = document.createElement('div');
+        item.className = 'checkbox-item';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = gene;
+        
+        const commonName = geneToCommonName[gene] || gene;
+        checkbox.dataset.common = commonName.toLowerCase();
+        checkbox.dataset.systematic = gene.toLowerCase();
+        
+        checkbox.addEventListener('change', () => handleCheckboxChange(checkbox, selectedGenes));
+        
+        const label = document.createElement('label');
+        label.textContent = `${commonName} (${gene})`;
+        
+        item.appendChild(checkbox);
+        item.appendChild(label);
+        geneContainer.appendChild(item);
     });
     
     // Initialize Cytoscape
@@ -144,7 +236,7 @@ function initCytoscape() {
             {
                 selector: 'node',
                 style: {
-                    'label': 'data(id)',
+                    'label': 'data(name)', // Use common name for display
                     'text-valign': 'center',
                     'text-halign': 'center',
                     'font-size': '10px',
@@ -187,8 +279,10 @@ function initCytoscape() {
     cy.on('tap', 'node', function(evt) {
         const node = evt.target;
         
-        // Display node information
-        nodeName.textContent = node.id();
+        // Display node information with both names
+        const commonName = node.data('name');
+        const sysName = node.id();
+        nodeName.textContent = `${commonName} (${sysName})`;
         nodeType.textContent = node.data('nodeType') === 'TF' ? 'Transcription Factor' : 'Target Gene';
         
         // Count connections
@@ -208,12 +302,16 @@ function initCytoscape() {
     // Add click event for edges to show info
     cy.on('tap', 'edge', function(evt) {
         const edge = evt.target;
-        const sourceNode = edge.source().id();
-        const targetNode = edge.target().id();
+        const sourceNode = edge.source();
+        const targetNode = edge.target();
         const confidence = edge.data('confidence').toFixed(3);
         
-        // Display edge information
-        nodeName.textContent = `${sourceNode} → ${targetNode}`;
+        // Get common names for the source and target
+        const sourceName = sourceNode.data('name');
+        const targetName = targetNode.data('name');
+        
+        // Display edge information with common names
+        nodeName.textContent = `${sourceName} → ${targetName}`;
         nodeType.textContent = 'Regulatory Relationship';
         nodeConnections.textContent = `Confidence: ${confidence}`;
         
@@ -233,19 +331,19 @@ function initCytoscape() {
 function visualizeNetwork() {
     console.log('Visualizing network...');
     
-    // Get selected transcription factors and target genes
-    const selectedTFs = Array.from(tfSelect.selectedOptions).map(option => option.value);
-    const selectedGenes = Array.from(geneSelect.selectedOptions).map(option => option.value);
+    // Use the selectedTFs and selectedGenes Sets
+    const selectedTFsArray = Array.from(selectedTFs);
+    const selectedGenesArray = Array.from(selectedGenes);
     
     // Get minimum confidence value
     const minConfidence = parseFloat(confidenceSlider.value);
     
-    console.log('Selected TFs:', selectedTFs);
-    console.log('Selected genes:', selectedGenes);
+    console.log('Selected TFs:', selectedTFsArray);
+    console.log('Selected genes:', selectedGenesArray);
     console.log('Minimum confidence:', minConfidence);
     
     // Check if any nodes are selected
-    if (selectedTFs.length === 0 && selectedGenes.length === 0) {
+    if (selectedTFsArray.length === 0 && selectedGenesArray.length === 0) {
         alert('Please select at least one transcription factor or target gene.');
         return;
     }
@@ -256,6 +354,9 @@ function visualizeNetwork() {
     
     // Clear previous visualization
     cy.elements().remove();
+    
+    // Hide node info
+    nodeInfo.style.display = 'none';
     
     // Prepare nodes and edges data
     const elements = [];
@@ -275,14 +376,16 @@ function visualizeNetwork() {
         if (value < minConfidence) return;
         
         // Add elements if they match the selection criteria
-        if ((selectedTFs.includes(tf) || selectedTFs.length === 0) && 
-            (selectedGenes.includes(gene) || selectedGenes.length === 0)) {
+        if ((selectedTFsArray.includes(tf) || selectedTFsArray.length === 0) && 
+            (selectedGenesArray.includes(gene) || selectedGenesArray.length === 0)) {
             
             // Add TF node if not already added
             if (!addedNodes.has(tf)) {
+                const commonTFName = tfToCommonName[tf] || tf;
                 elements.push({
                     data: {
                         id: tf,
+                        name: commonTFName, // Store common name for display
                         nodeType: 'TF',
                         size: 25
                     }
@@ -292,9 +395,11 @@ function visualizeNetwork() {
             
             // Add target gene node if not already added
             if (!addedNodes.has(gene)) {
+                const commonGeneName = geneToCommonName[gene] || gene;
                 elements.push({
                     data: {
                         id: gene,
+                        name: commonGeneName, // Store common name for display
                         nodeType: 'target',
                         size: 20
                     }
@@ -361,8 +466,12 @@ function resetVisualization() {
     console.log('Resetting visualization...');
     
     // Clear selections
-    clearAll(tfSelect);
-    clearAll(geneSelect);
+    selectAllCheckboxes(tfContainer, false, selectedTFs);
+    selectAllCheckboxes(geneContainer, false, selectedGenes);
+    
+    // Clear the sets
+    selectedTFs.clear();
+    selectedGenes.clear();
     
     // Reset confidence slider
     confidenceSlider.value = 0;
@@ -373,6 +482,12 @@ function resetVisualization() {
     
     // Hide node info
     nodeInfo.style.display = 'none';
+    
+    // Clear search fields
+    tfSearch.value = '';
+    geneSearch.value = '';
+    filterItems(tfContainer, '');
+    filterItems(geneContainer, '');
 }
 
 // Fit the network view to the container
