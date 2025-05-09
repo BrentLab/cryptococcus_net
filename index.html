@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cryptococcus neoformans TF Network Map</title>
+    
+    <!-- Cytoscape.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.21.1/cytoscape.min.js"></script>
+    
+    <!-- PapaParse for TSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #header {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+        
+        #container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        #control-panel {
+            width: 300px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+        }
+        
+        #network-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #cy {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+        }
+        
+        .control-section {
+            margin-bottom: 20px;
+        }
+        
+        .control-section h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        
+        select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        
+        button {
+            padding: 8px 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .slider-container {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 0.9em;
+        }
+        
+        #confidence-slider {
+            width: 100%;
+            margin: 0;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin-bottom: 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #node-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            display: none;
+            max-width: 250px;
+        }
+        
+        .checkbox-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            padding: 5px;
+            background-color: white;
+        }
+        
+        #transcription-factors {
+            max-height: 170px; /* Approximately 8 TFs at once */
+        }
+        
+        .checkbox-item {
+            padding: 3px 5px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .checkbox-item:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        
+        .search-box {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .loading-message {
+            padding: 10px;
+            color: #777;
+            text-align: center;
+        }
+        
+        .selection-info {
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>Visualization of the TF network map of <i>Cryptococcus neoformans</i></h1>
+    </div>
+    
+    <div id="container">
+        <div id="control-panel">
+            <div class="control-section">
+                <h3>Transcription Factors</h3>
+                <div id="tf-search-container">
+                    <input type="text" id="tf-search" placeholder="Search TFs..." class="search-box">
+                </div>
+                <div id="transcription-factors" class="checkbox-list">
+                    <div class="loading-message">Loading...</div>
+                </div>
+                <button id="select-all-tf">Select All</button>
+                <button id="clear-all-tf">Clear All</button>
+            </div>
+            
+            <div class="control-section">
+                <h3>Target Genes</h3>
+                <div id="gene-search-container">
+                    <input type="text" id="gene-search" placeholder="Search genes..." class="search-box">
+                </div>
+                <div id="target-genes" class="checkbox-list">
+                    <div class="loading-message">Loading...</div>
+                </div>
+                <button id="select-all-genes">Select All</button>
+                <button id="clear-all-genes">Clear All</button>
+            </div>
+            
+            <div class="control-section">
+                <h3>Confidence Filter</h3>
+                <div class="slider-container">
+                    <input type="range" id="confidence-slider" min="0" max="1" step="0.01" value="0">
+                    <div class="slider-labels">
+                        <span>0</span>
+                        <span>Min Confidence: <span id="confidence-value">0</span></span>
+                        <span>1</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <button id="visualize-btn">Visualize Network</button>
+                <button id="reset-btn">Clear All</button>
+                <button id="fit-btn">Fit View</button>
+            </div>
+            
+            <div class="control-section">
+                <h3>Selection Options</h3>
+                <button id="select-tf-targets-btn">Select TF & Targets</button>
+                <button id="clear-selection-btn">Clear Selection</button>
+                <div class="selection-info" id="selection-info">No nodes selected</div>
+            </div>
+        </div>
+        
+        <div id="network-container">
+            <div id="cy"></div>
+            <div id="loading">
+                <div class="spinner"></div>
+                <div id="loading-text">Loading network data...</div>
+            </div>
+            <div id="node-info">
+                <h3 id="node-name"></h3>
+                <p><strong>Type:</strong> <span id="node-type"></span></p>
+                <p><strong>Connections:</strong> <span id="node-connections"></span></p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="network.js"></script>
+</body>
+</html>
