@@ -26,6 +26,7 @@ const nodeName = document.getElementById('node-name');
 const nodeType = document.getElementById('node-type');
 const nodeConnections = document.getElementById('node-connections');
 const selectionInfo = document.getElementById('selection-info');
+const noConnectionsMessage = document.getElementById('no-connections');
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -54,8 +55,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const value = parseFloat(this.value).toFixed(2);
         confidenceValue.textContent = value;
         
-        // If network already visualized, update it
-        if (cy && cy.elements().length > 0) {
+        // Always update visualization if we have Cytoscape initialized
+        // and selections exist, regardless of whether elements are currently displayed
+        if (cy && (selectedTFs.size > 0 || selectedGenes.size > 0)) {
             visualizeNetwork();
         }
     });
@@ -84,22 +86,62 @@ function selectAllCheckboxes(container, isChecked, selectedSet) {
 
 // Helper function to filter items based on search input
 function filterItems(container, searchText) {
-    const items = container.querySelectorAll('.checkbox-item');
-    const lowerSearch = searchText.toLowerCase();
+    console.log(`Filtering items in ${container.id} with search text: "${searchText}"`);
     
+    const items = container.querySelectorAll('.checkbox-item');
+    const lowerSearch = searchText.toLowerCase().trim();
+    let anyVisible = false;
+    
+    // Always remove any existing "not found" message first
+    const existingMessage = container.querySelector('.not-found-message');
+    if (existingMessage) {
+        container.removeChild(existingMessage);
+    }
+    
+    // If search is empty, show all items
+    if (lowerSearch === '') {
+        items.forEach(item => {
+            item.style.display = '';
+        });
+        return;
+    }
+    
+    // Filter items based on search text
     items.forEach(item => {
         const checkbox = item.querySelector('input[type="checkbox"]');
         const commonName = checkbox.dataset.common;
         const systematicName = checkbox.dataset.systematic;
         
-        if (commonName.includes(lowerSearch) || 
-            systematicName.includes(lowerSearch) || 
-            lowerSearch === '') {
+        if (commonName.includes(lowerSearch) || systematicName.includes(lowerSearch)) {
             item.style.display = '';
+            anyVisible = true;
         } else {
             item.style.display = 'none';
         }
     });
+    
+    console.log(`Search for "${searchText}" found matches: ${anyVisible}`);
+    
+    // If no items match the search, display a message
+    if (!anyVisible) {
+        console.log(`No matches found for "${searchText}" in ${container.id}, showing message`);
+        
+        const message = document.createElement('div');
+        message.className = 'not-found-message';
+        
+        if (container.id === 'transcription-factors') {
+            message.textContent = 'This TF is not in the network';
+        } else if (container.id === 'target-genes') {
+            message.textContent = 'This target is not in the network';
+        }
+        
+        // Add message at the top for better visibility
+        if (container.firstChild) {
+            container.insertBefore(message, container.firstChild);
+        } else {
+            container.appendChild(message);
+        }
+    }
 }
 
 // Helper function to handle checkbox selection
@@ -430,6 +472,9 @@ function visualizeNetwork() {
     loading.style.display = 'flex';
     loadingText.textContent = 'Building network...';
     
+    // Hide the no-connections message (will show it later if needed)
+    noConnectionsMessage.style.display = 'none';
+    
     // Clear previous visualization
     cy.elements().remove();
     
@@ -514,8 +559,17 @@ function visualizeNetwork() {
     
     // If no elements added, show message and return
     if (elements.length === 0) {
+        console.log('No connections found. Selected TFs:', selectedTFsArray.length, 'Selected genes:', selectedGenesArray.length, 'Min confidence:', minConfidence);
         loading.style.display = 'none';
-        alert('No connections found with the current filters. Try lowering the confidence threshold or selecting different nodes.');
+        
+        // Update the message with current confidence threshold value
+        const noConnectionsTitle = noConnectionsMessage.querySelector('h3');
+        if (noConnectionsTitle) {
+            noConnectionsTitle.textContent = `No connections found (confidence: ${minConfidence.toFixed(2)})`;
+        }
+        
+        // Show the no-connections message
+        noConnectionsMessage.style.display = 'flex';
         return;
     }
     
@@ -541,8 +595,9 @@ function visualizeNetwork() {
         minTemp: 1.0
     }).run();
     
-    // Hide loading indicator
+    // Hide loading indicator and no-connections message
     loading.style.display = 'none';
+    noConnectionsMessage.style.display = 'none';
 }
 
 // Reset the visualization and selections
@@ -564,14 +619,22 @@ function resetVisualization() {
     // Clear graph
     cy.elements().remove();
     
-    // Hide node info
+    // Hide node info and no-connections message
     nodeInfo.style.display = 'none';
+    noConnectionsMessage.style.display = 'none';
     
     // Clear search fields
     tfSearch.value = '';
     geneSearch.value = '';
     filterItems(tfContainer, '');
     filterItems(geneContainer, '');
+    
+    // Remove any not-found messages
+    const tfMessage = tfContainer.querySelector('.not-found-message');
+    if (tfMessage) tfContainer.removeChild(tfMessage);
+    
+    const geneMessage = geneContainer.querySelector('.not-found-message');
+    if (geneMessage) geneContainer.removeChild(geneMessage);
 }
 
 // Fit the network view to the container
