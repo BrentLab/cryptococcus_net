@@ -27,6 +27,7 @@ const nodeType = document.getElementById('node-type');
 const nodeConnections = document.getElementById('node-connections');
 const selectionInfo = document.getElementById('selection-info');
 const noConnectionsMessage = document.getElementById('no-connections');
+const visualizeBtn = document.getElementById('visualize-btn');
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -68,6 +69,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Helper function to select/deselect all checkboxes
 function selectAllCheckboxes(container, isChecked, selectedSet) {
+    console.log(`Select all checkboxes in ${container.id}: ${isChecked}`);
+    
     const checkboxes = container.querySelectorAll('input[type="checkbox"]');
     checkboxes.forEach(checkbox => {
         checkbox.checked = isChecked;
@@ -78,9 +81,22 @@ function selectAllCheckboxes(container, isChecked, selectedSet) {
         }
     });
     
-    // If network already visualized, update it
-    if (cy && cy.elements().length > 0) {
-        visualizeNetwork();
+    // Always call visualizeNetwork to update display
+    if (cy) {
+        if (selectedTFs.size > 0 && selectedGenes.size > 0) {
+            console.log('Updating visualization after selecting all');
+            visualizeNetwork();
+        } else {
+            // If no valid selections, clear the visualization
+            console.log('Clearing visualization after selecting all');
+            cy.elements().remove();
+            // Show the no-connections message
+            noConnectionsMessage.style.display = 'flex';
+            const noConnectionsTitle = noConnectionsMessage.querySelector('h3');
+            if (noConnectionsTitle) {
+                noConnectionsTitle.textContent = 'Select at least one TF and one target gene';
+            }
+        }
     }
 }
 
@@ -144,17 +160,57 @@ function filterItems(container, searchText) {
     }
 }
 
+// Function to update the Visualize Network button state
+function updateVisualizeButtonState() {
+    // Check if at least one TF and one target gene are selected
+    const hasTFs = selectedTFs.size > 0;
+    const hasGenes = selectedGenes.size > 0;
+    
+    // Only enable the button if both conditions are met
+    visualizeBtn.disabled = !(hasTFs && hasGenes);
+    
+    // Optionally add visual indication of disabled state
+    if (hasTFs && hasGenes) {
+        visualizeBtn.classList.remove('disabled-btn');
+        visualizeBtn.title = 'Visualize network with selected TFs and genes';
+    } else {
+        visualizeBtn.classList.add('disabled-btn');
+        if (!hasTFs && !hasGenes) {
+            visualizeBtn.title = 'Select at least one TF and one target gene to visualize';
+        } else if (!hasTFs) {
+            visualizeBtn.title = 'Select at least one TF to visualize';
+        } else {
+            visualizeBtn.title = 'Select at least one target gene to visualize';
+        }
+    }
+}
+
 // Helper function to handle checkbox selection
 function handleCheckboxChange(checkbox, selectedSet) {
+    console.log(`Checkbox changed: ${checkbox.value}, checked: ${checkbox.checked}`);
+    
     if (checkbox.checked) {
         selectedSet.add(checkbox.value);
     } else {
         selectedSet.delete(checkbox.value);
     }
     
-    // If network already visualized, update it
-    if (cy && cy.elements().length > 0) {
-        visualizeNetwork();
+    // Always call visualizeNetwork to update display
+    if (cy) {
+        if (selectedTFs.size > 0 && selectedGenes.size > 0) {
+            console.log('Updating visualization after checkbox change');
+            visualizeNetwork();
+        } else {
+            // If no valid selections, clear the visualization
+            console.log('Clearing visualization after checkbox change');
+            cy.elements().remove();
+            // Show the no-connections message
+            noConnectionsMessage.style.display = 'flex';
+            const noConnectionsTitle = noConnectionsMessage.querySelector('h3');
+            if (noConnectionsTitle) {
+                noConnectionsTitle.textContent = 'Select at least one TF and one target gene';
+            }
+        }
     }
 }
 
@@ -275,6 +331,9 @@ function processNetworkData(data) {
     // Initialize Cytoscape
     loadingText.textContent = 'Initializing visualization...';
     initCytoscape();
+    
+    // Initialize the visualize button state (disabled by default since no selections)
+    updateVisualizeButtonState();
     
     // Hide loading indicator
     loading.style.display = 'none';
@@ -458,13 +517,30 @@ function visualizeNetwork() {
     // Get minimum confidence value
     const minConfidence = parseFloat(confidenceSlider.value);
     
-    console.log('Selected TFs:', selectedTFsArray);
-    console.log('Selected genes:', selectedGenesArray);
+    console.log('Selected TFs:', selectedTFsArray.length, selectedTFsArray);
+    console.log('Selected genes:', selectedGenesArray.length, selectedGenesArray);
     console.log('Minimum confidence:', minConfidence);
     
-    // Check if any nodes are selected
-    if (selectedTFsArray.length === 0 && selectedGenesArray.length === 0) {
-        alert('Please select at least one transcription factor or target gene.');
+    // Debug log the current state of the visualization
+    if (cy) {
+        console.log('Current network state:', {
+            nodes: cy.nodes().length,
+            edges: cy.edges().length
+        });
+    }
+    
+    // Check if both a TF and a target gene are selected
+    if (selectedTFsArray.length === 0 || selectedGenesArray.length === 0) {
+        console.log('Visualization aborted: need at least one TF and one target gene');
+        
+        // Show the no-connections message instead of just returning
+        cy.elements().remove();
+        loading.style.display = 'none';
+        noConnectionsMessage.style.display = 'flex';
+        const noConnectionsTitle = noConnectionsMessage.querySelector('h3');
+        if (noConnectionsTitle) {
+            noConnectionsTitle.textContent = 'Select at least one TF and one target gene';
+        }
         return;
     }
     
@@ -499,8 +575,8 @@ function visualizeNetwork() {
         if (value < minConfidence) return;
         
         // Add elements if they match the selection criteria
-        if ((selectedTFsArray.includes(tf) || selectedTFsArray.length === 0) && 
-            (selectedGenesArray.includes(gene) || selectedGenesArray.length === 0)) {
+        // Must have explicit selections for both TF and gene
+        if (selectedTFsArray.includes(tf) && selectedGenesArray.includes(gene)) {
             
             // Add TF node if not already added
             if (!addedNodes.has(tf)) {
@@ -611,6 +687,9 @@ function resetVisualization() {
     // Clear the sets
     selectedTFs.clear();
     selectedGenes.clear();
+    
+    // Update the Visualize Network button state
+    updateVisualizeButtonState();
     
     // Reset confidence slider
     confidenceSlider.value = 0;

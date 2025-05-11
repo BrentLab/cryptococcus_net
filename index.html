@@ -89,6 +89,17 @@
             background-color: #45a049;
         }
         
+        button:disabled, button.disabled-btn {
+            background-color: #cccccc;
+            color: #666666;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        button:disabled:hover, button.disabled-btn:hover {
+            background-color: #cccccc;
+        }
+        
         .slider-container {
             width: 100%;
             margin-bottom: 10px;
@@ -286,7 +297,8 @@
             </div>
             
             <div class="control-section">
-                <button id="visualize-btn">Visualize Network</button>
+                <!-- Visualize Network button temporarily hidden -->
+                <button id="visualize-btn" style="display: none;">Visualize Network</button>
                 <button id="reset-btn">Clear All</button>
                 <button id="fit-btn">Fit View</button>
             </div>
