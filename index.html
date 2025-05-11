@@ -224,7 +224,7 @@
             color: #555;
         }
         
-        #no-connections {
+        #no-connections, #large-network-warning {
             position: absolute;
             top: 0;
             left: 0;
@@ -237,19 +237,46 @@
             z-index: 5;
         }
         
-        .no-connections-message {
+        .no-connections-message, .large-network-message {
             max-width: 80%;
             padding: 20px;
             background-color: white;
-            border: 1px solid #e74c3c;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             text-align: center;
         }
         
+        .no-connections-message {
+            border: 1px solid #e74c3c;
+        }
+        
+        .large-network-message {
+            border: 1px solid #f39c12;
+        }
+        
         .no-connections-message h3 {
             color: #e74c3c;
             margin-top: 0;
+        }
+        
+        .large-network-message h3 {
+            color: #f39c12;
+            margin-top: 0;
+        }
+        
+        .warning-buttons {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        #proceed-anyway-btn {
+            background-color: #f39c12;
+        }
+        
+        #cancel-visualization-btn {
+            background-color: #7f8c8d;
         }
     </style>
 </head>
@@ -322,6 +349,17 @@
                     <h3>No connections found</h3>
                     <p>No connections match the current filters.</p>
                     <p>Try lowering the confidence threshold or selecting different nodes.</p>
+                </div>
+            </div>
+            <div id="large-network-warning" style="display: none;">
+                <div class="large-network-message">
+                    <h3>Large Network Warning</h3>
+                    <p>The network you are about to display is large and may take a long time to render.</p>
+                    <p id="network-size-info">This will display: <span id="warning-node-count">0</span> nodes and <span id="warning-edge-count">0</span> connections.</p>
+                    <div class="warning-buttons">
+                        <button id="proceed-anyway-btn">Proceed Anyway</button>
+                        <button id="cancel-visualization-btn">Cancel</button>
+                    </div>
                 </div>
             </div>
             <div id="node-info">

@@ -12,6 +12,15 @@ let geneToCommonName = {}; // Maps systematic gene name to common name
 let selectedTFs = new Set();
 let selectedGenes = new Set();
 
+// Variables for tracking network size and warnings
+let previousTFCount = 0;  // Track previous TF count for direction detection
+let previousGeneCount = 0;  // Track previous gene count for direction detection
+let previousConfidence = 1.0;  // Track previous confidence threshold
+
+// Network size thresholds for warnings
+const LARGE_NETWORK_NODE_THRESHOLD = 250;  // Warning threshold for nodes
+const LARGE_NETWORK_EDGE_THRESHOLD = 800;  // Warning threshold for edges
+
 // DOM elements
 const loading = document.getElementById('loading');
 const loadingText = document.getElementById('loading-text');
@@ -28,6 +37,13 @@ const nodeConnections = document.getElementById('node-connections');
 const selectionInfo = document.getElementById('selection-info');
 const noConnectionsMessage = document.getElementById('no-connections');
 const visualizeBtn = document.getElementById('visualize-btn');
+
+// Warning dialog elements
+const largeNetworkWarning = document.getElementById('large-network-warning');
+const warningNodeCount = document.getElementById('warning-node-count');
+const warningEdgeCount = document.getElementById('warning-edge-count');
+const proceedAnywayBtn = document.getElementById('proceed-anyway-btn');
+const cancelVisualizationBtn = document.getElementById('cancel-visualization-btn');
 
 // Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -46,6 +62,17 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('select-tf-targets-btn').addEventListener('click', selectTFAndTargets);
     document.getElementById('clear-selection-btn').addEventListener('click', clearSelection);
     
+    // Add event listeners for warning dialog buttons
+    proceedAnywayBtn.addEventListener('click', () => {
+        largeNetworkWarning.style.display = 'none';
+        renderLargeNetwork();
+    });
+    
+    cancelVisualizationBtn.addEventListener('click', () => {
+        largeNetworkWarning.style.display = 'none';
+        // No need to revert the selection - just don't render
+    });
+    
     // Set up search functionality
     tfSearch.addEventListener('input', () => filterItems(tfContainer, tfSearch.value));
     geneSearch.addEventListener('input', () => filterItems(geneContainer, geneSearch.value));
@@ -56,11 +83,24 @@ document.addEventListener('DOMContentLoaded', function() {
         const value = parseFloat(this.value).toFixed(2);
         confidenceValue.textContent = value;
         
+        // Check direction of confidence change
+        const currentConfidence = parseFloat(this.value);
+        const isIncreasingThreshold = currentConfidence > previousConfidence;
+        
         // Always update visualization if we have Cytoscape initialized
         // and selections exist, regardless of whether elements are currently displayed
-        if (cy && (selectedTFs.size > 0 || selectedGenes.size > 0)) {
-            visualizeNetwork();
+        if (cy && (selectedTFs.size > 0 && selectedGenes.size > 0)) {
+            // Only check for large network if we're decreasing the threshold (showing more edges)
+            if (!isIncreasingThreshold) {
+                checkAndVisualizeNetwork();
+            } else {
+                // If increasing threshold (showing fewer edges), always safe to proceed
+                visualizeNetwork();
+            }
         }
+        
+        // Update previous confidence value
+        previousConfidence = currentConfidence;
     });
     
     // Load network data
@@ -70,6 +110,13 @@ document.addEventListener('DOMContentLoaded', function() {
 // Helper function to select/deselect all checkboxes
 function selectAllCheckboxes(container, isChecked, selectedSet) {
     console.log(`Select all checkboxes in ${container.id}: ${isChecked}`);
+    
+    // Store previous counts
+    const prevTFCount = selectedTFs.size;
+    const prevGeneCount = selectedGenes.size;
+    
+    // Track if this is adding or removing items
+    const previousSize = selectedSet.size;
     
     const checkboxes = container.querySelectorAll('input[type="checkbox"]');
     checkboxes.forEach(checkbox => {
@@ -81,11 +128,22 @@ function selectAllCheckboxes(container, isChecked, selectedSet) {
         }
     });
     
-    // Always call visualizeNetwork to update display
+    // Determine if this operation increased or decreased selection
+    const isAddingSelection = selectedSet.size > previousSize;
+    const isTFSet = selectedSet === selectedTFs;
+    
+    // Always call appropriate visualization method to update display
     if (cy) {
         if (selectedTFs.size > 0 && selectedGenes.size > 0) {
             console.log('Updating visualization after selecting all');
-            visualizeNetwork();
+            
+            // Only check for large network when adding items (select all), not when removing (clear all)
+            if (isAddingSelection) {
+                checkAndVisualizeNetwork();
+            } else {
+                // Removing items is always safe to proceed
+                visualizeNetwork();
+            }
         } else {
             // If no valid selections, clear the visualization
             console.log('Clearing visualization after selecting all');
@@ -98,6 +156,10 @@ function selectAllCheckboxes(container, isChecked, selectedSet) {
             }
         }
     }
+    
+    // Update previous counts for next time
+    previousTFCount = selectedTFs.size;
+    previousGeneCount = selectedGenes.size;
 }
 
 // Helper function to filter items based on search input
@@ -189,17 +251,37 @@ function updateVisualizeButtonState() {
 function handleCheckboxChange(checkbox, selectedSet) {
     console.log(`Checkbox changed: ${checkbox.value}, checked: ${checkbox.checked}`);
     
+    // Store previous counts to detect direction
+    const prevTFCount = selectedTFs.size;
+    const prevGeneCount = selectedGenes.size;
+    
+    // Update the selection
     if (checkbox.checked) {
         selectedSet.add(checkbox.value);
     } else {
         selectedSet.delete(checkbox.value);
     }
     
-    // Always call visualizeNetwork to update display
+    // Determine if this is adding or removing from the selection
+    const isTFSet = selectedSet === selectedTFs;
+    const isAddingSelection = checkbox.checked;
+    
+    const currentTFCount = selectedTFs.size;
+    const currentGeneCount = selectedGenes.size;
+    
+    // Always call appropriate visualization method to update display
     if (cy) {
-        if (selectedTFs.size > 0 && selectedGenes.size > 0) {
+        if (currentTFCount > 0 && currentGeneCount > 0) {
             console.log('Updating visualization after checkbox change');
-            visualizeNetwork();
+            
+            // Only check network size when adding selections, not when removing
+            if (isAddingSelection) {
+                // If we're adding a TF or gene, we should check network size
+                checkAndVisualizeNetwork();
+            } else {
+                // If we're removing, always safe to proceed
+                visualizeNetwork();
+            }
         } else {
             // If no valid selections, clear the visualization
             console.log('Clearing visualization after checkbox change');
@@ -212,6 +294,10 @@ function handleCheckboxChange(checkbox, selectedSet) {
             }
         }
     }
+    
+    // Update previous counts for next time
+    previousTFCount = currentTFCount;
+    previousGeneCount = currentGeneCount;
 }
 
 // Load the network data from the TSV file
@@ -506,6 +592,85 @@ function initCytoscape() {
     });
 }
 
+// Function to calculate potential network size and check if it's large
+function calculateNetworkSize() {
+    const selectedTFsArray = Array.from(selectedTFs);
+    const selectedGenesArray = Array.from(selectedGenes);
+    const minConfidence = parseFloat(confidenceSlider.value);
+    
+    let potentialNodeCount = 0;
+    let potentialEdgeCount = 0;
+    const uniqueNodes = new Set();
+    
+    // Count potential nodes and edges based on current selections and confidence
+    networkData.forEach(row => {
+        const tf = row.REGULATOR;
+        const gene = row.TARGET;
+        const value = parseFloat(row.VALUE);
+        
+        // Skip invalid entries
+        if (!tf || !gene || isNaN(value)) return;
+        
+        // Filter by confidence value
+        if (value < minConfidence) return;
+        
+        // Check if this connection would be included in the visualization
+        if (selectedTFsArray.includes(tf) && selectedGenesArray.includes(gene)) {
+            // Count unique nodes
+            if (!uniqueNodes.has(tf)) {
+                uniqueNodes.add(tf);
+                potentialNodeCount++;
+            }
+            if (!uniqueNodes.has(gene)) {
+                uniqueNodes.add(gene);
+                potentialNodeCount++;
+            }
+            
+            // Count edges
+            potentialEdgeCount++;
+        }
+    });
+    
+    console.log(`Potential network size: ${potentialNodeCount} nodes, ${potentialEdgeCount} edges`);
+    
+    return {
+        nodeCount: potentialNodeCount,
+        edgeCount: potentialEdgeCount,
+        isLargeNetwork: potentialNodeCount > LARGE_NETWORK_NODE_THRESHOLD || 
+                        potentialEdgeCount > LARGE_NETWORK_EDGE_THRESHOLD
+    };
+}
+
+// Function to check network size and decide whether to show warning or visualize
+function checkAndVisualizeNetwork() {
+    // Calculate potential network size
+    const networkSize = calculateNetworkSize();
+    
+    if (networkSize.isLargeNetwork) {
+        console.log('Large network detected - showing warning');
+        
+        // Update the warning message with the network size
+        warningNodeCount.textContent = networkSize.nodeCount;
+        warningEdgeCount.textContent = networkSize.edgeCount;
+        
+        // Show the warning
+        largeNetworkWarning.style.display = 'flex';
+        
+        // Hide other messages/indicators
+        loading.style.display = 'none';
+        noConnectionsMessage.style.display = 'none';
+    } else {
+        // If not a large network, proceed with visualization
+        visualizeNetwork();
+    }
+}
+
+// Function called when the user chooses to proceed with a large network
+function renderLargeNetwork() {
+    console.log('User chose to proceed with large network visualization');
+    visualizeNetwork();
+}
+
 // Visualize the network based on selected nodes
 function visualizeNetwork() {
     console.log('Visualizing network...');
@@ -698,9 +863,10 @@ function resetVisualization() {
     // Clear graph
     cy.elements().remove();
     
-    // Hide node info and no-connections message
+    // Hide all overlays
     nodeInfo.style.display = 'none';
     noConnectionsMessage.style.display = 'none';
+    largeNetworkWarning.style.display = 'none';
     
     // Clear search fields
     tfSearch.value = '';
@@ -733,7 +899,101 @@ function selectTFAndTargets() {
         return;
     }
     
+    // Store the count of selected TFs and genes before making changes
+    const originalTFCount = selectedTFs.size;
+    const originalGeneCount = selectedGenes.size;
+    
     // Keep track of new selections
+    let newSelections = 0;
+    let addedGenes = new Set(); // Track newly added genes
+    
+    // First, collect all target genes that would be selected
+    const potentialGenes = new Set();
+    selectedNodes.forEach(node => {
+        if (node.data('nodeType') === 'TF' || node.data('nodeType') === 'TF-target') {
+            node.outgoers('edge').forEach(edge => {
+                const targetNode = edge.target();
+                potentialGenes.add(targetNode.id());
+            });
+        }
+    });
+    
+    // Check if this would add a lot of genes
+    if (potentialGenes.size > 50) {
+        // This is potentially a large addition
+        const totalPotentialGenes = new Set([...selectedGenes, ...potentialGenes]);
+        
+        // Calculate potential network size with these selections
+        const selectedTFsArray = Array.from(selectedTFs);
+        const selectedGenesArray = Array.from(totalPotentialGenes);
+        const minConfidence = parseFloat(confidenceSlider.value);
+        
+        let potentialNodeCount = 0;
+        let potentialEdgeCount = 0;
+        const uniqueNodes = new Set();
+        
+        // Count potential nodes and edges
+        networkData.forEach(row => {
+            const tf = row.REGULATOR;
+            const gene = row.TARGET;
+            const value = parseFloat(row.VALUE);
+            
+            if (!tf || !gene || isNaN(value) || value < minConfidence) return;
+            
+            if (selectedTFsArray.includes(tf) && selectedGenesArray.includes(gene)) {
+                if (!uniqueNodes.has(tf)) {
+                    uniqueNodes.add(tf);
+                    potentialNodeCount++;
+                }
+                if (!uniqueNodes.has(gene)) {
+                    uniqueNodes.add(gene);
+                    potentialNodeCount++;
+                }
+                potentialEdgeCount++;
+            }
+        });
+        
+        // Check if this would create a large network
+        if (potentialNodeCount > LARGE_NETWORK_NODE_THRESHOLD || 
+            potentialEdgeCount > LARGE_NETWORK_EDGE_THRESHOLD) {
+            
+            // Show warning
+            warningNodeCount.textContent = potentialNodeCount;
+            warningEdgeCount.textContent = potentialEdgeCount;
+            largeNetworkWarning.style.display = 'flex';
+            
+            // Set up special handler for this case
+            proceedAnywayBtn.onclick = function() {
+                largeNetworkWarning.style.display = 'none';
+                // Continue with actual selection
+                completeTargetSelection(selectedNodes, true);
+                
+                // Reset normal proceed button behavior
+                proceedAnywayBtn.onclick = function() {
+                    largeNetworkWarning.style.display = 'none';
+                    renderLargeNetwork();
+                };
+            };
+            
+            cancelVisualizationBtn.onclick = function() {
+                largeNetworkWarning.style.display = 'none';
+                
+                // Reset normal cancel button behavior
+                cancelVisualizationBtn.onclick = function() {
+                    largeNetworkWarning.style.display = 'none';
+                };
+            };
+            
+            return;
+        }
+    }
+    
+    // If we get here, it's safe to proceed with selection
+    completeTargetSelection(selectedNodes, false);
+}
+
+// Helper function to complete the target selection and update UI
+function completeTargetSelection(selectedNodes, wasFromWarning) {
     let newSelections = 0;
     
     // For each selected node
@@ -755,6 +1015,13 @@ function selectTFAndTargets() {
                 if (!targetNode.selected()) {
                     targetNode.select();
                     newSelections++;
+                    
+                    // Also update the checkbox in the UI
+                    selectedGenes.add(targetNode.id());
+                    const checkbox = document.querySelector(`#target-genes input[value="${targetNode.id()}"]`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                    }
                 }
             });
         }
@@ -763,9 +1030,13 @@ function selectTFAndTargets() {
     // Update the selection info
     updateSelectionInfo();
     
-    // If nothing new was selected, inform the user
-    if (newSelections === 0 && selectedNodes.length > 0) {
+    // For large networks, the warning dialog has already been shown
+    if (newSelections === 0 && selectedNodes.length > 0 && !wasFromWarning) {
         alert('The selected transcription factor(s) do not regulate any genes in the current network view.');
+    } else if (newSelections > 0) {
+        // Visualize network with the new selections
+        // Since we're adding items, use the check function
+        checkAndVisualizeNetwork();
     }
 }
 
