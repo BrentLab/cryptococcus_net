@@ -89,6 +89,17 @@
             background-color: #45a049;
         }
         
+        button:disabled, button.disabled-btn {
+            background-color: #cccccc;
+            color: #666666;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        button:disabled:hover, button.disabled-btn:hover {
+            background-color: #cccccc;
+        }
+        
         .slider-container {
             width: 100%;
             margin-bottom: 10px;
@@ -189,6 +200,20 @@
             text-align: center;
         }
         
+        .not-found-message {
+            padding: 10px;
+            color: #e74c3c;
+            text-align: center;
+            font-weight: bold;
+            background-color: #ffeaea;
+            border: 1px solid #e74c3c;
+            border-radius: 4px;
+            margin: 10px 0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
         .selection-info {
             margin-top: 10px;
             padding: 8px;
@@ -197,6 +222,61 @@
             border-radius: 4px;
             font-size: 0.9em;
             color: #555;
+        }
+        
+        #no-connections, #large-network-warning {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(255, 255, 255, 0.9);
+            z-index: 5;
+        }
+        
+        .no-connections-message, .large-network-message {
+            max-width: 80%;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .no-connections-message {
+            border: 1px solid #e74c3c;
+        }
+        
+        .large-network-message {
+            border: 1px solid #f39c12;
+        }
+        
+        .no-connections-message h3 {
+            color: #e74c3c;
+            margin-top: 0;
+        }
+        
+        .large-network-message h3 {
+            color: #f39c12;
+            margin-top: 0;
+        }
+        
+        .warning-buttons {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        #proceed-anyway-btn {
+            background-color: #f39c12;
+        }
+        
+        #cancel-visualization-btn {
+            background-color: #7f8c8d;
         }
     </style>
 </head>
@@ -244,7 +324,8 @@
             </div>
             
             <div class="control-section">
-                <button id="visualize-btn">Visualize Network</button>
+                <!-- Visualize Network button temporarily hidden -->
+                <button id="visualize-btn" style="display: none;">Visualize Network</button>
                 <button id="reset-btn">Clear All</button>
                 <button id="fit-btn">Fit View</button>
             </div>
@@ -262,6 +343,24 @@
             <div id="loading">
                 <div class="spinner"></div>
                 <div id="loading-text">Loading network data...</div>
+            </div>
+            <div id="no-connections" style="display: none;">
+                <div class="no-connections-message">
+                    <h3>No connections found</h3>
+                    <p>No connections match the current filters.</p>
+                    <p>Try lowering the confidence threshold or selecting different nodes.</p>
+                </div>
+            </div>
+            <div id="large-network-warning" style="display: none;">
+                <div class="large-network-message">
+                    <h3>Large Network Warning</h3>
+                    <p>The network you are about to display is large and may take a long time to render.</p>
+                    <p id="network-size-info">This will display: <span id="warning-node-count">0</span> nodes and <span id="warning-edge-count">0</span> connections.</p>
+                    <div class="warning-buttons">
+                        <button id="proceed-anyway-btn">Proceed Anyway</button>
+                        <button id="cancel-visualization-btn">Cancel</button>
+                    </div>
+                </div>
             </div>
             <div id="node-info">
                 <h3 id="node-name"></h3>
