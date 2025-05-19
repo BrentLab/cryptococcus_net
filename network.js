@@ -15,7 +15,7 @@ let selectedGenes = new Set();
 // Variables for tracking network size and warnings
 let previousTFCount = 0;  // Track previous TF count for direction detection
 let previousGeneCount = 0;  // Track previous gene count for direction detection
-let previousConfidence = 1.0;  // Track previous confidence threshold
+let previousConfidence = 0.14;  // Track previous confidence threshold - initialized to minimum value
 
 // Network size thresholds for warnings
 const LARGE_NETWORK_NODE_THRESHOLD = 250;  // Warning threshold for nodes
@@ -856,9 +856,9 @@ function resetVisualization() {
     // Update the Visualize Network button state
     updateVisualizeButtonState();
     
-    // Reset confidence slider
-    confidenceSlider.value = 0;
-    confidenceValue.textContent = '0.00';
+    // Reset confidence slider to minimum value (0.14)
+    confidenceSlider.value = 0.14;
+    confidenceValue.textContent = '0.14';
     
     // Clear graph
     cy.elements().remove();
