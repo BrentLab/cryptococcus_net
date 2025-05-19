@@ -8,6 +8,12 @@ let cy = null;
 let tfToCommonName = {}; // Maps systematic TF name to common name
 let geneToCommonName = {}; // Maps systematic gene name to common name
 
+// Special TFs with no edges in thresholded network
+const specialTFs = {
+    '03894': 'Pdr802',
+    '01242': 'HapX'
+};
+
 // Maps to store selected items
 let selectedTFs = new Set();
 let selectedGenes = new Set();
@@ -362,16 +368,46 @@ function processNetworkData(data) {
         }
     });
     
-    console.log(`Found ${tfSet.size} transcription factors and ${geneSet.size} target genes`);
+    // Add special TFs (Pdr802 and HapX) that aren't in the network
+    for (const [sysName, commonName] of Object.entries(specialTFs)) {
+        tfSet.add(sysName);
+        tfToCommonName[sysName] = commonName;
+    }
+    
+    console.log(`Found ${tfSet.size} transcription factors (including special TFs) and ${geneSet.size} target genes`);
+    
+    // Debug: Show a sample of TF common names
+    console.log("Sample of TF mappings (systematic -> common):", 
+               Object.entries(tfToCommonName).slice(0, 5).map(([sys, common]) => `${sys} -> ${common}`));
     
     // Fill select elements with options
     loadingText.textContent = 'Populating menus...';
     
     // Clear and populate the transcription factors with checkboxes
     tfContainer.innerHTML = '';
-    Array.from(tfSet).sort().forEach(tf => {
+    
+    // Sort TFs by common name (if available) or systematic name
+    Array.from(tfSet).sort((a, b) => {
+        // Get common names for comparison, falling back to systematic names if needed
+        const aName = (tfToCommonName[a] || a).toLowerCase();
+        const bName = (tfToCommonName[b] || b).toLowerCase();
+        return aName.localeCompare(bName);
+    }).forEach(tf => {
         const item = document.createElement('div');
         item.className = 'checkbox-item';
+        
+        // Check if this is one of our special TFs
+        const isSpecialTF = specialTFs.hasOwnProperty(tf);
+        
+        // Add special styling for special TFs
+        if (isSpecialTF) {
+            item.style.display = 'block'; // Block instead of flex to match other TFs
+            item.style.backgroundColor = '#f0f8ff'; // Light blue background
+            item.style.padding = '5px';
+            item.style.border = '1px solid #ccc';
+            item.style.borderRadius = '4px';
+            item.style.marginBottom = '5px';
+        }
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -384,20 +420,48 @@ function processNetworkData(data) {
         checkbox.dataset.common = commonName.toLowerCase();
         checkbox.dataset.systematic = tf.toLowerCase();
         
-        checkbox.addEventListener('change', () => handleCheckboxChange(checkbox, selectedTFs));
+        // Disable checkbox for special TFs
+        if (isSpecialTF) {
+            checkbox.disabled = true;
+            checkbox.title = "This TF has no connections in the network";
+        } else {
+            checkbox.addEventListener('change', () => handleCheckboxChange(checkbox, selectedTFs));
+        }
         
+        // Create label (same for all TFs)
         const label = document.createElement('label');
         // Only show systematic name in parentheses if it's different from common name
         label.textContent = commonName !== tf ? `${commonName} (${tf})` : commonName;
         
+        // Standard layout for all TFs 
         item.appendChild(checkbox);
         item.appendChild(label);
+        
+        // Add message for special TFs
+        if (isSpecialTF) {
+            const message = document.createElement('div');
+            message.style.fontSize = '12px';
+            message.style.color = '#666';
+            message.style.fontStyle = 'italic';
+            message.style.marginTop = '2px';
+            message.style.marginLeft = '22px'; // Align to match standard indentation
+            message.textContent = "has targets with low confidence scores, and hence excluded.";
+            item.appendChild(message);
+        }
+        
         tfContainer.appendChild(item);
     });
     
     // Clear and populate the target genes with checkboxes
     geneContainer.innerHTML = '';
-    Array.from(geneSet).sort().forEach(gene => {
+    
+    // Sort genes by common name (if available) or systematic name
+    Array.from(geneSet).sort((a, b) => {
+        // Get common names for comparison, falling back to systematic names if needed
+        const aName = (geneToCommonName[a] || a).toLowerCase();
+        const bName = (geneToCommonName[b] || b).toLowerCase();
+        return aName.localeCompare(bName);
+    }).forEach(gene => {
         const item = document.createElement('div');
         item.className = 'checkbox-item';
         
@@ -693,6 +757,14 @@ function visualizeNetwork() {
     console.log('Selected TFs:', selectedTFsArray.length, selectedTFsArray);
     console.log('Selected genes:', selectedGenesArray.length, selectedGenesArray);
     console.log('Minimum confidence:', minConfidence);
+    
+    // Check for special TFs and warn the user if they're selected
+    const selectedSpecialTFs = selectedTFsArray.filter(tf => specialTFs.hasOwnProperty(tf));
+    if (selectedSpecialTFs.length > 0) {
+        console.log('Special TFs selected:', selectedSpecialTFs);
+        // We could add a warning here if needed, but we'll just allow them to be selected
+        // They just won't show any connections in the network
+    }
     
     // Debug log the current state of the visualization
     if (cy) {
