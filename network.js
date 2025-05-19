@@ -34,7 +34,7 @@ const nodeInfo = document.getElementById('node-info');
 const nodeName = document.getElementById('node-name');
 const nodeType = document.getElementById('node-type');
 const nodeConnections = document.getElementById('node-connections');
-const selectionInfo = document.getElementById('selection-info');
+const selectionInfo = document.getElementById('selection-info'); // Optional - might be hidden
 const noConnectionsMessage = document.getElementById('no-connections');
 const visualizeBtn = document.getElementById('visualize-btn');
 
@@ -58,9 +58,17 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('select-all-genes').addEventListener('click', () => selectAllCheckboxes(geneContainer, true, selectedGenes));
     document.getElementById('clear-all-genes').addEventListener('click', () => selectAllCheckboxes(geneContainer, false, selectedGenes));
     
-    // Add event listeners for selection options
-    document.getElementById('select-tf-targets-btn').addEventListener('click', selectTFAndTargets);
-    document.getElementById('clear-selection-btn').addEventListener('click', clearSelection);
+    // Add event listeners for selection options (if elements exist)
+    const selectTFTargetsBtn = document.getElementById('select-tf-targets-btn');
+    const clearSelectionBtn = document.getElementById('clear-selection-btn');
+    
+    if (selectTFTargetsBtn) {
+        selectTFTargetsBtn.addEventListener('click', selectTFAndTargets);
+    }
+    
+    if (clearSelectionBtn) {
+        clearSelectionBtn.addEventListener('click', clearSelection);
+    }
     
     // Add event listeners for warning dialog buttons
     proceedAnywayBtn.addEventListener('click', () => {
@@ -1048,6 +1056,11 @@ function clearSelection() {
 
 // Update the selection info display
 function updateSelectionInfo() {
+    // If the selection info element doesn't exist (panel might be hidden), do nothing
+    if (!selectionInfo) {
+        return;
+    }
+    
     const selectedNodes = cy.nodes(':selected');
     const selectedEdges = cy.edges(':selected');
     
