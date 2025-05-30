@@ -91,30 +91,41 @@ document.addEventListener('DOMContentLoaded', function() {
     tfSearch.addEventListener('input', () => filterItems(tfContainer, tfSearch.value));
     geneSearch.addEventListener('input', () => filterItems(geneContainer, geneSearch.value));
     
-    // Set up confidence slider
+    // Variable to store the debounce timeout
+    let confidenceSliderTimeout;
+    
+    // Set up confidence slider with debouncing
     confidenceSlider.addEventListener('input', function() {
-        // Update display value
+        // Update display value immediately (this is fast)
         const value = parseFloat(this.value).toFixed(2);
         confidenceValue.textContent = value;
         
-        // Check direction of confidence change
+        // Store current confidence for use in the timeout function
         const currentConfidence = parseFloat(this.value);
         const isIncreasingThreshold = currentConfidence > previousConfidence;
         
-        // Always update visualization if we have Cytoscape initialized
-        // and selections exist, regardless of whether elements are currently displayed
-        if (cy && (selectedTFs.size > 0 && selectedGenes.size > 0)) {
-            // Only check for large network if we're decreasing the threshold (showing more edges)
-            if (!isIncreasingThreshold) {
-                checkAndVisualizeNetwork();
-            } else {
-                // If increasing threshold (showing fewer edges), always safe to proceed
-                visualizeNetwork();
-            }
-        }
+        // Clear any existing timeout to prevent multiple executions
+        clearTimeout(confidenceSliderTimeout);
         
-        // Update previous confidence value
-        previousConfidence = currentConfidence;
+        // Set a new timeout to delay the expensive operations
+        confidenceSliderTimeout = setTimeout(() => {
+            console.log(`Debounced slider update: ${currentConfidence}`);
+            
+            // Always update visualization if we have Cytoscape initialized
+            // and selections exist, regardless of whether elements are currently displayed
+            if (cy && (selectedTFs.size > 0 && selectedGenes.size > 0)) {
+                // Only check for large network if we're decreasing the threshold (showing more edges)
+                if (!isIncreasingThreshold) {
+                    checkAndVisualizeNetwork();
+                } else {
+                    // If increasing threshold (showing fewer edges), always safe to proceed
+                    visualizeNetwork();
+                }
+            }
+            
+            // Update previous confidence value
+            previousConfidence = currentConfidence;
+        }, 300); // 300ms delay for debouncing
     });
     
     // Load network data
@@ -445,7 +456,7 @@ function processNetworkData(data) {
             message.style.fontStyle = 'italic';
             message.style.marginTop = '2px';
             message.style.marginLeft = '22px'; // Align to match standard indentation
-            message.textContent = "has targets with low confidence scores, and hence excluded.";
+            message.textContent = "has no targets with confidence scores above the minimum display.";
             item.appendChild(message);
         }
         
@@ -666,13 +677,16 @@ function initCytoscape() {
 
 // Function to calculate potential network size and check if it's large
 function calculateNetworkSize() {
-    const selectedTFsArray = Array.from(selectedTFs);
-    const selectedGenesArray = Array.from(selectedGenes);
+    // Use Sets directly for O(1) lookups instead of Arrays with O(n) includes() method
+    const selectedTFsSet = selectedTFs; // Already a Set, no need to convert
+    const selectedGenesSet = selectedGenes; // Already a Set, no need to convert
     const minConfidence = parseFloat(confidenceSlider.value);
     
     let potentialNodeCount = 0;
     let potentialEdgeCount = 0;
     const uniqueNodes = new Set();
+    
+    console.log(`Calculating network size with ${selectedTFsSet.size} TFs and ${selectedGenesSet.size} genes at confidence >= ${minConfidence}`);
     
     // Count potential nodes and edges based on current selections and confidence
     networkData.forEach(row => {
@@ -687,7 +701,8 @@ function calculateNetworkSize() {
         if (value < minConfidence) return;
         
         // Check if this connection would be included in the visualization
-        if (selectedTFsArray.includes(tf) && selectedGenesArray.includes(gene)) {
+        // Using Set.has() (O(1)) instead of Array.includes() (O(n))
+        if (selectedTFsSet.has(tf) && selectedGenesSet.has(gene)) {
             // Count unique nodes
             if (!uniqueNodes.has(tf)) {
                 uniqueNodes.add(tf);
