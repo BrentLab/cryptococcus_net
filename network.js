@@ -8,6 +8,9 @@ let cy = null;
 let tfToCommonName = {}; // Maps systematic TF name to common name
 let geneToCommonName = {}; // Maps systematic gene name to common name
 
+// Flag to track if large network warning is currently displayed
+let isLargeNetworkWarningVisible = false;
+
 // Special TFs with no edges in thresholded network
 const specialTFs = {
     '03894': 'Pdr802',
@@ -22,6 +25,12 @@ let selectedGenes = new Set();
 let previousTFCount = 0;  // Track previous TF count for direction detection
 let previousGeneCount = 0;  // Track previous gene count for direction detection
 let previousConfidence = 0.14;  // Track previous confidence threshold - initialized to minimum value
+
+// Store state before showing large network warning (for cancel restoration)
+let preLargeNetworkState = null;
+
+// Track the last change that triggered a large network warning
+let lastChangeInfo = null;
 
 // Network size thresholds for warnings
 const LARGE_NETWORK_NODE_THRESHOLD = 250;  // Warning threshold for nodes
@@ -78,13 +87,92 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add event listeners for warning dialog buttons
     proceedAnywayBtn.addEventListener('click', () => {
+        console.log('PROCEED: User clicked Proceed Anyway');
+        if (lastChangeInfo) {
+            console.log('PROCEED: lastChangeInfo exists:', JSON.stringify({
+                value: lastChangeInfo.checkbox.value,
+                wasChecked: lastChangeInfo.previousState,
+                nowChecked: lastChangeInfo.checkbox.checked
+            }));
+        } else {
+            console.log('PROCEED: No lastChangeInfo available');
+        }
+        
         largeNetworkWarning.style.display = 'none';
+        isLargeNetworkWarningVisible = false;
+        // Clear the saved state since user chose to proceed
+        preLargeNetworkState = null;
+        // We'll also clear lastChangeInfo in the renderLargeNetwork function
         renderLargeNetwork();
     });
     
     cancelVisualizationBtn.addEventListener('click', () => {
         largeNetworkWarning.style.display = 'none';
-        // No need to revert the selection - just don't render
+        isLargeNetworkWarningVisible = false;
+        
+        // Check if we have information about the last change that triggered the warning
+        if (lastChangeInfo) {
+            // Check if this was a confidence slider change
+            if (lastChangeInfo.isConfidenceChange) {
+                console.log('CANCEL: Confidence slider change detected, reverting from', 
+                    confidenceSlider.value, 'to', lastChangeInfo.previousValue);
+                
+                // Restore the previous confidence value
+                confidenceSlider.value = lastChangeInfo.previousValue;
+                confidenceValue.textContent = lastChangeInfo.previousValue.toFixed(2);
+                previousConfidence = lastChangeInfo.previousValue;
+                
+                // Clear the last change info
+                lastChangeInfo = null;
+            } else {
+                // Handle checkbox change as before
+                console.log('CANCEL: Last change info found:', JSON.stringify({
+                    value: lastChangeInfo.checkbox.value,
+                    wasChecked: lastChangeInfo.previousState,
+                    nowChecked: lastChangeInfo.checkbox.checked,
+                    isTF: lastChangeInfo.isTFCheckbox
+                }));
+                
+                // Revert just the specific checkbox that triggered the warning
+                const checkbox = lastChangeInfo.checkbox;
+                const selectedSet = lastChangeInfo.isTFCheckbox ? selectedTFs : selectedGenes;
+                
+                console.log(`CANCEL: Before reversion - checkbox checked: ${checkbox.checked}, in selection set: ${selectedSet.has(checkbox.value)}`);
+                
+                // Set checkbox back to its previous state
+                checkbox.checked = lastChangeInfo.previousState;
+                
+                // Update the selection set to match
+                if (checkbox.checked) {
+                    selectedSet.add(checkbox.value);
+                } else {
+                    selectedSet.delete(checkbox.value);
+                }
+                
+                console.log(`CANCEL: After reversion - checkbox checked: ${checkbox.checked}, in selection set: ${selectedSet.has(checkbox.value)}`);
+                
+                // Clear the last change info
+                lastChangeInfo = null;
+            }
+        }
+        // For backwards compatibility, also handle the full state restoration
+        else if (preLargeNetworkState) {
+            console.log('No last change info, using full state restoration');
+            
+            // Restore confidence slider value
+            confidenceSlider.value = preLargeNetworkState.confidenceValue;
+            confidenceValue.textContent = preLargeNetworkState.confidenceDisplayValue;
+            previousConfidence = preLargeNetworkState.confidenceValue;
+            
+            // Restore TF selections
+            restoreSelections(tfContainer, preLargeNetworkState.selectedTFs, selectedTFs);
+            
+            // Restore gene selections
+            restoreSelections(geneContainer, preLargeNetworkState.selectedGenes, selectedGenes);
+            
+            // Clear the saved state
+            preLargeNetworkState = null;
+        }
     });
     
     // Set up search functionality
@@ -111,11 +199,43 @@ document.addEventListener('DOMContentLoaded', function() {
         confidenceSliderTimeout = setTimeout(() => {
             console.log(`Debounced slider update: ${currentConfidence}`);
             
+            // Check if the large network warning is currently visible
+            if (isLargeNetworkWarningVisible) {
+                console.log('Confidence slider moved while warning is displayed - updating warning information');
+                // Don't visualize the network, but DO update the warning information
+                updateNetworkSizeWarning();
+                
+                // Make sure we still update the previousConfidence value
+                // This is important to maintain proper tracking of increasing/decreasing threshold
+                previousConfidence = currentConfidence;
+                
+                return;
+            }
+            
             // Always update visualization if we have Cytoscape initialized
             // and selections exist, regardless of whether elements are currently displayed
             if (cy && (selectedTFs.size > 0 && selectedGenes.size > 0)) {
                 // Only check for large network if we're decreasing the threshold (showing more edges)
                 if (!isIncreasingThreshold) {
+                    // Save the confidence state before showing warning
+                    // This will only happen if we detect a large network
+                    if (!preLargeNetworkState) {
+                        console.log('Saving confidence state before potential large network warning');
+                        preLargeNetworkState = {
+                            selectedTFs: Array.from(selectedTFs),
+                            selectedGenes: Array.from(selectedGenes),
+                            confidenceValue: previousConfidence, // Store the previous value before slider change
+                            confidenceDisplayValue: previousConfidence.toFixed(2)
+                        };
+                        
+                        // Also save a special lastChangeInfo for confidence slider
+                        lastChangeInfo = {
+                            isConfidenceChange: true,
+                            previousValue: previousConfidence,
+                            newValue: currentConfidence
+                        };
+                    }
+                    
                     checkAndVisualizeNetwork();
                 } else {
                     // If increasing threshold (showing fewer edges), always safe to proceed
@@ -136,6 +256,12 @@ document.addEventListener('DOMContentLoaded', function() {
 function selectAllCheckboxes(container, isChecked, selectedSet) {
     console.log(`Select all checkboxes in ${container.id}: ${isChecked}`);
     
+    // Check if a large network warning is being shown
+    if (isLargeNetworkWarningVisible) {
+        console.log('SELECT ALL: Ignoring "Select All" operation while large network warning is displayed');
+        return;
+    }
+    
     // Store previous counts
     const prevTFCount = selectedTFs.size;
     const prevGeneCount = selectedGenes.size;
@@ -143,7 +269,27 @@ function selectAllCheckboxes(container, isChecked, selectedSet) {
     // Track if this is adding or removing items
     const previousSize = selectedSet.size;
     
-    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    // For Select All operations, we need to handle it differently
+    // since we can't use lastChangeInfo (multiple checkboxes)
+    if (isChecked) {
+        // Reset lastChangeInfo since we're making a bulk change
+        lastChangeInfo = null;
+        
+        // Save full state before "Select All"
+        if (!preLargeNetworkState) {
+            console.log("Saving state before 'Select All' operation");
+            preLargeNetworkState = {
+                selectedTFs: Array.from(selectedTFs),
+                selectedGenes: Array.from(selectedGenes),
+                confidenceValue: parseFloat(confidenceSlider.value),
+                confidenceDisplayValue: confidenceValue.textContent
+            };
+        }
+    }
+    
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]:not(:disabled)');
+    console.log(`Found ${checkboxes.length} enabled checkboxes to ${isChecked ? 'check' : 'uncheck'}`);
+    
     checkboxes.forEach(checkbox => {
         checkbox.checked = isChecked;
         if (isChecked) {
@@ -274,11 +420,44 @@ function updateVisualizeButtonState() {
 
 // Helper function to handle checkbox selection
 function handleCheckboxChange(checkbox, selectedSet) {
-    console.log(`Checkbox changed: ${checkbox.value}, checked: ${checkbox.checked}`);
+    console.log(`CHECKBOX: Change event for ${checkbox.value}, checked: ${checkbox.checked}`);
+    
+    // Check if a large network warning is being shown
+    if (isLargeNetworkWarningVisible) {
+        console.log('CHECKBOX: Ignoring checkbox change while large network warning is displayed');
+        
+        // Revert the checkbox state since we're ignoring this change
+        // The event has already fired, so the checkbox is in the new state
+        // We need to revert it back without triggering another event
+        checkbox.checked = !checkbox.checked;
+        
+        return;
+    }
     
     // Store previous counts to detect direction
     const prevTFCount = selectedTFs.size;
     const prevGeneCount = selectedGenes.size;
+    
+    // Log previous state if we already have lastChangeInfo
+    if (lastChangeInfo) {
+        console.log('CHECKBOX: Warning! lastChangeInfo already exists:', JSON.stringify({
+            value: lastChangeInfo.checkbox.value,
+            wasChecked: lastChangeInfo.previousState
+        }));
+    }
+    
+    // Save the single change info BEFORE making the change
+    // This lets us revert just this one checkbox if needed
+    const wasChecked = !checkbox.checked; // When the change event fires, the state has already changed
+    
+    lastChangeInfo = {
+        checkbox: checkbox,
+        previousState: wasChecked, // The state BEFORE this change (opposite of current)
+        isTFCheckbox: selectedSet === selectedTFs,
+        value: checkbox.value
+    };
+    
+    console.log(`CHECKBOX: Saved lastChangeInfo for ${checkbox.value}, previous state was: ${lastChangeInfo.previousState}, changing to: ${checkbox.checked}`);
     
     // Update the selection
     if (checkbox.checked) {
@@ -728,13 +907,79 @@ function calculateNetworkSize() {
     };
 }
 
+// Function to update the network size warning information without visualizing
+function updateNetworkSizeWarning() {
+    // Calculate potential network size based on current selections and confidence threshold
+    const networkSize = calculateNetworkSize();
+    
+    console.log('Updating warning information - potential network size:', 
+               networkSize.nodeCount, 'nodes,', 
+               networkSize.edgeCount, 'edges',
+               'isLargeNetwork:', networkSize.isLargeNetwork);
+    
+    // Update the warning message with the network size
+    warningNodeCount.textContent = networkSize.nodeCount;
+    warningEdgeCount.textContent = networkSize.edgeCount;
+    
+    // Check if the network is still large enough to warrant a warning
+    // If not, we should auto-dismiss the warning and proceed with visualization
+    if (!networkSize.isLargeNetwork) {
+        console.log('Network is no longer large enough to warrant a warning - auto-proceeding');
+        
+        // Hide the warning
+        largeNetworkWarning.style.display = 'none';
+        isLargeNetworkWarningVisible = false;
+        
+        // Clear saved state
+        preLargeNetworkState = null;
+        lastChangeInfo = null;
+        
+        // Proceed with visualization
+        visualizeNetwork();
+    }
+}
+
 // Function to check network size and decide whether to show warning or visualize
 function checkAndVisualizeNetwork() {
     // Calculate potential network size
     const networkSize = calculateNetworkSize();
     
     if (networkSize.isLargeNetwork) {
-        console.log('Large network detected - showing warning');
+        console.log('CHECK: Large network detected - showing warning');
+        
+        // Log the lastChangeInfo state
+        if (lastChangeInfo) {
+            console.log('CHECK: lastChangeInfo exists when showing warning:', JSON.stringify({
+                value: lastChangeInfo.value,
+                wasChecked: lastChangeInfo.previousState
+            }));
+        } else {
+            console.log('CHECK: No lastChangeInfo available when showing warning');
+        }
+        
+        // Save state if we don't already have one (for backward compatibility)
+        // Note: We might already have saved it in selectAllCheckboxes
+        if (!preLargeNetworkState) {
+            console.log('CHECK: Saving full state before showing warning...');
+            
+            // Get current selections
+            const currentTFs = Array.from(selectedTFs);
+            const currentGenes = Array.from(selectedGenes);
+            
+            console.log(`CHECK: Current state: ${currentTFs.length} TFs, ${currentGenes.length} genes`);
+            
+            // Save current state before showing warning (for potential cancellation)
+            preLargeNetworkState = {
+                selectedTFs: currentTFs,
+                selectedGenes: currentGenes,
+                confidenceValue: parseFloat(confidenceSlider.value),
+                confidenceDisplayValue: confidenceValue.textContent
+            };
+        } else {
+            console.log('CHECK: Warning shown again, existing saved state contains:', 
+                    preLargeNetworkState.selectedTFs.length, 'TFs,', 
+                    preLargeNetworkState.selectedGenes.length, 'genes');
+        }
         
         // Update the warning message with the network size
         warningNodeCount.textContent = networkSize.nodeCount;
@@ -742,12 +987,15 @@ function checkAndVisualizeNetwork() {
         
         // Show the warning
         largeNetworkWarning.style.display = 'flex';
+        isLargeNetworkWarningVisible = true;
         
         // Hide other messages/indicators
         loading.style.display = 'none';
         noConnectionsMessage.style.display = 'none';
     } else {
         // If not a large network, proceed with visualization
+        // Also clear any saved state since we're proceeding without a warning
+        preLargeNetworkState = null;
         visualizeNetwork();
     }
 }
@@ -755,6 +1003,8 @@ function checkAndVisualizeNetwork() {
 // Function called when the user chooses to proceed with a large network
 function renderLargeNetwork() {
     console.log('User chose to proceed with large network visualization');
+    // Clear the last change info since user chose to proceed
+    lastChangeInfo = null;
     visualizeNetwork();
 }
 
@@ -1139,6 +1389,48 @@ function completeTargetSelection(selectedNodes, wasFromWarning) {
 function clearSelection() {
     cy.elements().unselect();
     updateSelectionInfo();
+}
+
+// Helper function to restore selections to a previous state
+function restoreSelections(container, previouslySelectedValues, currentSelectionSet) {
+    console.log(`Starting restoration for ${container.id}`);
+    console.log(`Previous selection had ${previouslySelectedValues.length} items`);
+    console.log(`Current selection has ${currentSelectionSet.size} items`);
+    
+    // Clear current selection set
+    currentSelectionSet.clear();
+    console.log(`After clearing, selection has ${currentSelectionSet.size} items`);
+    
+    // Get all checkboxes
+    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+    console.log(`Found ${checkboxes.length} checkboxes in ${container.id}`);
+    
+    // Convert the previous selection array to a Set for O(1) lookups
+    const previousSelectionSet = new Set(previouslySelectedValues);
+    
+    // Debug - check a few values to ensure they're in the set
+    if (previouslySelectedValues.length > 0) {
+        console.log(`First few previous values: ${previouslySelectedValues.slice(0, 3)}`);
+        console.log(`First value in set? ${previousSelectionSet.has(previouslySelectedValues[0])}`);
+    }
+    
+    // Update each checkbox
+    let checkedCount = 0;
+    checkboxes.forEach(checkbox => {
+        // Check if this item was in the previous selection
+        const wasSelected = previousSelectionSet.has(checkbox.value);
+        
+        // Update checkbox state
+        checkbox.checked = wasSelected;
+        
+        // Update selection set
+        if (wasSelected) {
+            currentSelectionSet.add(checkbox.value);
+            checkedCount++;
+        }
+    });
+    
+    console.log(`Restored ${currentSelectionSet.size} selections in ${container.id} (checked ${checkedCount} boxes)`);
 }
 
 // Update the selection info display
