@@ -32,6 +32,16 @@ let preLargeNetworkState = null;
 // Track the last change that triggered a large network warning
 let lastChangeInfo = null;
 
+// Function to update instruction visibility based on selections
+function updateInstructionVisibility() {
+    const hasSelections = selectedTFs.size > 0 || selectedGenes.size > 0;
+    if (hasSelections) {
+        networkInstructions.style.display = 'none';
+    } else {
+        networkInstructions.style.display = 'block';
+    }
+}
+
 // Network size thresholds for warnings
 const LARGE_NETWORK_NODE_THRESHOLD = 250;  // Warning threshold for nodes
 const LARGE_NETWORK_EDGE_THRESHOLD = 800;  // Warning threshold for edges
@@ -52,6 +62,7 @@ const nodeConnections = document.getElementById('node-connections');
 const selectionInfo = document.getElementById('selection-info'); // Optional - might be hidden
 const noConnectionsMessage = document.getElementById('no-connections');
 const visualizeBtn = document.getElementById('visualize-btn');
+const networkInstructions = document.getElementById('network-instructions');
 
 // Warning dialog elements
 const largeNetworkWarning = document.getElementById('large-network-warning');
@@ -299,6 +310,9 @@ function selectAllCheckboxes(container, isChecked, selectedSet) {
         }
     });
     
+    // Update instruction visibility
+    updateInstructionVisibility();
+    
     // Determine if this operation increased or decreased selection
     const isAddingSelection = selectedSet.size > previousSize;
     const isTFSet = selectedSet === selectedTFs;
@@ -465,6 +479,9 @@ function handleCheckboxChange(checkbox, selectedSet) {
     } else {
         selectedSet.delete(checkbox.value);
     }
+    
+    // Update instruction visibility
+    updateInstructionVisibility();
     
     // Determine if this is adding or removing from the selection
     const isTFSet = selectedSet === selectedTFs;
@@ -711,23 +728,29 @@ function initCytoscape() {
             {
                 selector: 'node[nodeType="TF"]',
                 style: {
-                    'background-color': '#3498db',
+                    'background-color': 'white',
+                    'border-width': 3,
+                    'border-color': '#e74c3c',
                     'shape': 'ellipse'
                 }
             },
             {
                 selector: 'node[nodeType="TF-target"]',
                 style: {
-                    'background-color': '#3498db', // Same blue as TFs
-                    'shape': 'diamond', // Diamond shape to distinguish from pure TFs
+                    'background-color': 'white',
+                    'border-width': 3,
+                    'border-color': '#e74c3c', // Same red as TFs
+                    'shape': 'ellipse', // Changed to ellipse
                     'font-style': 'italic' // Italic like targets
                 }
             },
             {
                 selector: 'node[nodeType="target"]',
                 style: {
-                    'background-color': '#e74c3c',
-                    'shape': 'rectangle',
+                    'background-color': 'white',
+                    'border-width': 3,
+                    'border-color': '#3498db',
+                    'shape': 'ellipse',
                     'font-style': 'italic'
                 }
             },
@@ -1098,7 +1121,7 @@ function visualizeNetwork() {
                         id: tf,
                         name: commonTFName, // Store common name for display
                         nodeType: 'TF',
-                        size: 25
+                        size: 45
                     }
                 });
                 addedNodes.add(tf);
@@ -1116,7 +1139,7 @@ function visualizeNetwork() {
                         id: gene,
                         name: commonGeneName, // Store common name for display
                         nodeType: isAlsoTF ? 'TF-target' : 'target', // Mark genes that are also TFs
-                        size: 20
+                        size: 40
                     }
                 });
                 addedNodes.add(gene);
@@ -1197,6 +1220,9 @@ function resetVisualization() {
     // Clear the sets
     selectedTFs.clear();
     selectedGenes.clear();
+    
+    // Update instruction visibility
+    updateInstructionVisibility();
     
     // Update the Visualize Network button state
     updateVisualizeButtonState();
