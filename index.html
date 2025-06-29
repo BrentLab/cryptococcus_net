@@ -23,14 +23,33 @@
         }
         
         #header {
+            padding: 0;
+        }
+        
+        .title-section {
             background-color: #333;
             color: white;
             padding: 15px;
         }
         
         h1 {
-            margin: 0;
+            margin: 0 0 20px 0;
             font-size: 1.5em;
+        }
+        
+        .citation-section {
+            background-color: rgba(52, 152, 219, 0.05);
+            border-left: 3px solid #3498db;
+            border-bottom: 1px solid #d4d4d4;
+            padding: 15px 0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .citation-section p {
+            margin: 0;
+            font-size: 0.8em;
+            color: #666;
+            font-style: italic;
         }
         
         #container {
@@ -278,11 +297,59 @@
         #cancel-visualization-btn {
             background-color: #7f8c8d;
         }
+        
+        #network-instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 8;
+            pointer-events: none;
+        }
+        
+        .network-instructions-content {
+            background-color: rgba(52, 152, 219, 0.1);
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            backdrop-filter: blur(2px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .network-instructions-content h3 {
+            margin: 0 0 12px 0;
+            font-size: 1.1em;
+            color: #2c3e50;
+            border-bottom: 1px solid #3498db;
+            padding-bottom: 6px;
+        }
+        
+        .network-instructions-content ul {
+            margin: 0;
+            padding-left: 20px;
+            font-size: 0.95em;
+            color: #333;
+        }
+        
+        .network-instructions-content li {
+            margin-bottom: 8px;
+        }
+        
+        .network-instructions-content li:last-child {
+            margin-bottom: 0;
+        }
     </style>
 </head>
 <body>
     <div id="header">
-        <h1>Visualization of the TF network map of <i>Cryptococcus neoformans</i></h1>
+        <div class="title-section">
+            <h1>Visualization of the TF network map of <i>Cryptococcus neoformans</i></h1>
+        </div>
+        
+        <div class="citation-section">
+            <div style="max-width: 580px; margin: 0; padding: 0 15px;">
+                <p><u>If you use this website or network for publication, please cite:</u><br><br><a href="https://www.biorxiv.org/content/10.1101/2025.05.10.653149v1" target="_blank">Abid D, Brown H, Mateusiak C, Doering TL, Brent MR. Mapping the transcriptional regulatory network of a fungal pathogen by exploiting transcription factor perturbation. bioRxiv. 2025.</a></p>
+            </div>
+        </div>
     </div>
     
     <div id="container">
@@ -314,10 +381,10 @@
             <div class="control-section">
                 <h3>Confidence Filter</h3>
                 <div class="slider-container">
-                    <input type="range" id="confidence-slider" min="0" max="1" step="0.01" value="0">
+                    <input type="range" id="confidence-slider" min="0.14" max="1" step="0.01" value="0.14">
                     <div class="slider-labels">
-                        <span>0</span>
-                        <span>Min Confidence: <span id="confidence-value">0</span></span>
+                        <span>0.14</span>
+                        <span>Min Confidence: <span id="confidence-value">0.14</span></span>
                         <span>1</span>
                     </div>
                 </div>
@@ -330,16 +397,29 @@
                 <button id="fit-btn">Fit View</button>
             </div>
             
+            <!-- Selection Options panel is now hidden
             <div class="control-section">
                 <h3>Selection Options</h3>
                 <button id="select-tf-targets-btn">Select TF & Targets</button>
                 <button id="clear-selection-btn">Clear Selection</button>
                 <div class="selection-info" id="selection-info">No nodes selected</div>
             </div>
+            -->
         </div>
         
         <div id="network-container">
             <div id="cy"></div>
+            <div id="network-instructions">
+                <div class="network-instructions-content">
+                    <h3>Instructions for visualization:</h3>
+                    <ul>
+                        <li>Select TFs and targets (checkbox on the left) to see the regulatory network links connecting them.</li>
+                        <li>Scroll to zoom in or out. Click and drag to move to a different part of the network display.</li>
+                        <li>Red indicates genes that encode TFs, blue all other genes.</li>
+                        <li>For a visualized network, shift+click a TF node to select that TF and its targets. To deselect an already selected TF and targets, shift+click again.</li>
+                    </ul>
+                </div>
+            </div>
             <div id="loading">
                 <div class="spinner"></div>
                 <div id="loading-text">Loading network data...</div>
