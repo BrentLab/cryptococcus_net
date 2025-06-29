@@ -32,13 +32,46 @@ let preLargeNetworkState = null;
 // Track the last change that triggered a large network warning
 let lastChangeInfo = null;
 
-// Function to update instruction visibility based on selections
+// Track whether a network is currently rendered
+let isNetworkRendered = false;
+
+// Function to update instruction visibility based on selections and network state
 function updateInstructionVisibility() {
     const hasSelections = selectedTFs.size > 0 || selectedGenes.size > 0;
-    if (hasSelections) {
-        networkInstructions.style.display = 'none';
-    } else {
+    // Show instructions only when there are no selections AND no network is rendered
+    const shouldShowInstructions = !hasSelections && !isNetworkRendered;
+    
+    if (shouldShowInstructions) {
         networkInstructions.style.display = 'block';
+    } else {
+        networkInstructions.style.display = 'none';
+    }
+}
+
+
+// Function to clear all selections (TFs and genes)
+function clearAllSelections() {
+    // Clear TF selections
+    selectedTFs.clear();
+    const tfCheckboxes = tfContainer.querySelectorAll('input[type="checkbox"]');
+    tfCheckboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Clear gene selections
+    selectedGenes.clear();
+    const geneCheckboxes = geneContainer.querySelectorAll('input[type="checkbox"]');
+    geneCheckboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // Update instruction visibility
+    updateInstructionVisibility();
+    
+    // Clear the network visualization
+    if (cy) {
+        cy.elements().remove();
+        isNetworkRendered = false;
     }
 }
 
@@ -335,6 +368,7 @@ function selectAllCheckboxes(container, isChecked, selectedSet) {
             cy.elements().remove();
             // Show the no-connections message
             noConnectionsMessage.style.display = 'flex';
+            isNetworkRendered = false;
             const noConnectionsTitle = noConnectionsMessage.querySelector('h3');
             if (noConnectionsTitle) {
                 noConnectionsTitle.textContent = 'Select at least one TF and one target gene';
@@ -509,6 +543,7 @@ function handleCheckboxChange(checkbox, selectedSet) {
             cy.elements().remove();
             // Show the no-connections message
             noConnectionsMessage.style.display = 'flex';
+            isNetworkRendered = false;
             const noConnectionsTitle = noConnectionsMessage.querySelector('h3');
             if (noConnectionsTitle) {
                 noConnectionsTitle.textContent = 'Select at least one TF and one target gene';
@@ -860,10 +895,12 @@ function initCytoscape() {
         nodeInfo.style.display = 'block';
     });
     
-    // Hide info panel when clicking on background
+    // Hide info panel and clear visual node selections when clicking on background
     cy.on('tap', function(evt) {
         if (evt.target === cy) {
             nodeInfo.style.display = 'none';
+            // Only clear visual node selections in the network, keep checkboxes and network intact
+            cy.elements().unselect();
         }
     });
     
@@ -874,6 +911,46 @@ function initCytoscape() {
     
     cy.on('unselect', function() {
         updateSelectionInfo();
+    });
+    
+    // Shift+click TF nodes to toggle selection of TF and all its connected target nodes
+    cy.on('click', 'node[nodeType="TF"], node[nodeType="TF-target"]', function(evt) {
+        // Check if Shift key is held
+        if (evt.originalEvent && evt.originalEvent.shiftKey) {
+            evt.preventDefault(); // Prevent default click behavior
+            evt.stopPropagation(); // Stop event from bubbling
+            evt.stopImmediatePropagation(); // Prevent other handlers on this element from running
+            
+            const tfNode = evt.target;
+            const tfId = tfNode.id();
+            
+            // Find all target nodes connected to this TF in the network
+            const targetNodes = tfNode.outgoers('node'); // Gets nodes connected via outgoing edges
+            
+            // Check if TF AND all its targets are currently selected
+            const isTFSelected = tfNode.selected();
+            const allTargetsSelected = targetNodes.length > 0 && targetNodes.every(node => node.selected());
+            const isCompleteGroupSelected = isTFSelected && allTargetsSelected;
+            
+            console.log('Shift+clicked TF node:', tfId, 'TF selected:', isTFSelected, 'All targets selected:', allTargetsSelected, 'Complete group selected:', isCompleteGroupSelected);
+            
+            if (isCompleteGroupSelected) {
+                // If TF AND all targets are selected, deselect the complete group
+                targetNodes.unselect();
+                requestAnimationFrame(() => {
+                    tfNode.unselect();
+                    console.log('Deselected complete group: TF and', targetNodes.length, 'target nodes');
+                });
+            } else {
+                // If the complete group is not selected, select TF and all its targets
+                targetNodes.select();
+                requestAnimationFrame(() => {
+                    tfNode.select();
+                    console.log('Selected complete group: TF and', targetNodes.length, 'target nodes');
+                });
+            }
+        }
+        // Regular clicks without Shift will use Cytoscape's default selection behavior
     });
 }
 
@@ -1070,6 +1147,7 @@ function visualizeNetwork() {
         cy.elements().remove();
         loading.style.display = 'none';
         noConnectionsMessage.style.display = 'flex';
+        isNetworkRendered = false;
         const noConnectionsTitle = noConnectionsMessage.querySelector('h3');
         if (noConnectionsTitle) {
             noConnectionsTitle.textContent = 'Select at least one TF and one target gene';
@@ -1179,6 +1257,7 @@ function visualizeNetwork() {
         
         // Show the no-connections message
         noConnectionsMessage.style.display = 'flex';
+        isNetworkRendered = false;
         return;
     }
     
@@ -1207,6 +1286,10 @@ function visualizeNetwork() {
     // Hide loading indicator and no-connections message
     loading.style.display = 'none';
     noConnectionsMessage.style.display = 'none';
+    
+    // Mark network as successfully rendered
+    isNetworkRendered = true;
+    updateInstructionVisibility();
 }
 
 // Reset the visualization and selections
@@ -1233,6 +1316,7 @@ function resetVisualization() {
     
     // Clear graph
     cy.elements().remove();
+    isNetworkRendered = false;
     
     // Hide all overlays
     nodeInfo.style.display = 'none';
