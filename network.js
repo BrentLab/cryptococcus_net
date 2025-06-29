@@ -132,14 +132,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add event listeners for warning dialog buttons
     proceedAnywayBtn.addEventListener('click', () => {
         console.log('PROCEED: User clicked Proceed Anyway');
-        if (lastChangeInfo) {
+        if (lastChangeInfo && lastChangeInfo.checkbox) {
             console.log('PROCEED: lastChangeInfo exists:', JSON.stringify({
                 value: lastChangeInfo.checkbox.value,
                 wasChecked: lastChangeInfo.previousState,
                 nowChecked: lastChangeInfo.checkbox.checked
             }));
         } else {
-            console.log('PROCEED: No lastChangeInfo available');
+            console.log('PROCEED: No lastChangeInfo available or checkbox is undefined');
         }
         
         largeNetworkWarning.style.display = 'none';
